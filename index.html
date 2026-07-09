@@ -33,7 +33,7 @@ nav button{appearance:none;border:0;background:transparent;color:#B7CCC9;font:60
 nav button:hover{color:#fff}
 nav button.on{color:#fff;background:var(--paper);color:var(--ink);border-bottom-color:#5FD3B8}
 nav button:focus-visible{outline:2px solid #5FD3B8;outline-offset:-2px}
-.sync{margin-left:auto;display:flex;align-items:center;gap:7px;font:600 12px 'Inter';color:#B7CCC9;background:rgba(255,255,255,.08);border-radius:99px;padding:5px 12px}
+.sync{margin-left:auto;display:flex;align-items:center;gap:7px;font:600 12px 'Inter';color:#B7CCC9;background:rgba(255,255,255,.08);border-radius:99px;padding:5px 12px;cursor:pointer}
 .sync .sdot{width:8px;height:8px;border-radius:99px;background:#8FA6A3}
 .sync.ok .sdot{background:#5FD3B8}
 .sync.err .sdot{background:#F08A7E}
@@ -252,9 +252,11 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 /* ================= DADOS BASE (agregados mensais por filial) ================= */
 const DADOS_BASE = {}; // sistema inicia zerado — os dados entram pela aba Importar
 
-/* ============ BACKEND: google.script.run (servido pelo próprio Apps Script) ============
-   Nenhuma configuração necessária: a página é publicada pelo Apps Script e
-   conversa com a planilha por chamadas internas (google.script.run).        */
+/* ============ BACKEND HÍBRIDO ============
+   · Aberto pela URL /exec do Apps Script → conversa direto (google.script.run), zero config.
+   · Aberto pelo GitHub Pages → usa a URL abaixo (fetch). Cole UMA VEZ a URL /exec
+     da implantação do Apps Script e todos os computadores funcionam:            */
+const API_URL = 'COLE_AQUI_A_URL_DO_APPS_SCRIPT';
 
 /* ================= ESTADO ================= */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -275,6 +277,37 @@ function gsCall(fn){
     google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,args);
   });
 }
+function apiUrl(){
+  if(/^https:\/\/script\.google/.test(API_URL)) return API_URL.trim();
+  try{ const u=localStorage.getItem('miashop_api_url'); if(u) return u; }catch(e){}
+  return null;
+}
+function temBackend(){ return temGS() || !!apiUrl(); }
+async function beCarregar(){
+  if(temGS()) return gsCall('carregarDados');
+  const r=await fetch(apiUrl()+'?acao=carregar'); if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function beSalvar(){
+  if(temGS()){
+    const r=await gsCall('salvarDados', JSON.stringify(dados));
+    if(r && r.ok===false) throw new Error(r.erro||'erro ao salvar');
+    return;
+  }
+  const r=await fetch(apiUrl(),{method:'POST',body:JSON.stringify({acao:'salvar',dados})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j=await r.json().catch(()=>({ok:true}));
+  if(j && j.ok===false) throw new Error(j.erro||'erro ao salvar');
+}
+function configurarUrl(){
+  const atual=apiUrl()||'';
+  const u=prompt('Cole a URL do App da Web do Apps Script (termina com /exec):',atual);
+  if(u===null) return;
+  const limpa=u.trim();
+  if(!/^https:\/\/script\.google.*\/exec/.test(limpa)){ alert('URL inválida. Ela deve começar com https://script.google.com/... e terminar com /exec'); return; }
+  try{ localStorage.setItem('miashop_api_url',limpa); }catch(e){}
+  location.reload();
+}
 function setBadge(cls,txt){
   const b=document.getElementById('syncBadge');
   b.className='sync '+cls;
@@ -290,31 +323,28 @@ function loadLocal(){
 }
 async function saveData(){
   try{ localStorage.setItem('miashop_vendas_v2', JSON.stringify(dados)); }catch(e){}
-  if(!temGS()) return;
+  if(!temBackend()) return;
   setBadge('busy','Salvando na planilha…');
-  try{
-    const r = await gsCall('salvarDados', JSON.stringify(dados));
-    if(r && r.ok===false) throw new Error(r.erro||'erro ao salvar');
-    online=true; setBadge('ok','Sincronizado com a planilha');
-  }
+  try{ await beSalvar(); online=true; setBadge('ok','Sincronizado com a planilha'); }
   catch(e){ online=false; setBadge('err','Falha ao salvar — dados guardados neste navegador'); }
 }
 async function init(){
-  if(temGS()){
+  if(temBackend()){
     setBadge('busy','Carregando da planilha…');
     try{
-      const remoto = await gsCall('carregarDados');
+      const remoto = await beCarregar();
       dados = (remoto && typeof remoto==='object') ? remoto : {};
       online = true; setBadge('ok','Sincronizado com a planilha');
       if(unificarFiliais(dados)) await saveData(); // consolida duplicadas na planilha
     }catch(e){
-      online = false; dados = loadLocal();
-      setBadge('err','Sem conexão com a planilha — modo local');
+      online = false; dados = loadLocal(); unificarFiliais(dados);
+      setBadge('err','Sem conexão com a planilha — modo local (clique para configurar)');
     }
   }else{
     dados = loadLocal(); unificarFiliais(dados);
-    setBadge('warn','Aberto fora do Apps Script — modo local');
+    setBadge('warn','Backend não configurado — clique aqui para conectar');
   }
+  document.getElementById('syncBadge').onclick=()=>{ if(!temGS() && !online) configurarUrl(); };
   buildFilters(); updateDataInfo(); render();
 }
 
@@ -682,7 +712,7 @@ async function mergePending(){
   st.innerHTML='<div class="alert ok">Dados incorporados. Todos os gráficos e tabelas foram atualizados.</div>';
   buildFilters(); updateDataInfo(); render();
   await saveData();
-  if(temGS() && online)
+  if(temBackend() && online)
     st.innerHTML='<div class="alert ok">Dados incorporados e salvos na planilha do Google — disponíveis em qualquer computador.</div>';
 }
 document.getElementById('btnReset').onclick=async()=>{
@@ -737,13 +767,13 @@ async function pdfToMatrix(file){
 function updateDataInfo(){
   const ys=allYears(), brs=allBranches();
   if(!brs.length){
-    const modo0 = temGS() ? (online?'conectado à planilha do Google':'sem conexão com a planilha') : 'modo local';
+    const modo0 = temBackend() ? (online?'conectado à planilha do Google':'sem conexão com a planilha') : 'modo local';
     document.getElementById('dataInfo').innerHTML = `Base atual: <b>vazia</b> · ${modo0}`;
     return;
   }
-  const modo = temGS()
+  const modo = temBackend()
     ? (online ? 'salvos na planilha do Google (aba “Dados”, um valor por célula)' : 'modo local — sem conexão com a planilha')
-    : 'modo local — abra pelo link do App da Web para sincronizar';
+    : 'modo local — clique no selo do topo para conectar à planilha';
   document.getElementById('dataInfo').innerHTML=
     `Base atual: <b>${brs.length} filiais</b> · anos <b>${ys[0]}–${ys[ys.length-1]}</b> · ${modo}`;
 }
