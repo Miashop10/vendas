@@ -97,6 +97,9 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 .btn.primary:hover{background:var(--ink-2)}
 .btn.ghost{background:transparent;color:var(--neg);border:1.5px solid var(--line)}
 .btn.ghost:hover{background:var(--neg-bg)}
+.empty-banner{background:var(--card);border:1.5px dashed #B8C7C3;border-radius:var(--r);padding:34px 22px;text-align:center;margin-bottom:18px}
+.empty-banner .eb-title{font:700 17px 'Archivo';margin-bottom:7px}
+.empty-banner .eb-txt{font-size:13.5px;color:var(--muted);max-width:520px;margin:0 auto 16px}
 .imp-status{margin-top:16px}
 .imp-box{border:1px solid var(--line);border-radius:12px;padding:16px;background:#FBFDFC}
 .imp-box h3{font-size:14px;margin-bottom:8px}
@@ -150,6 +153,12 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 </div>
 
 <main>
+
+<div class="empty-banner" id="emptyBanner" style="display:none">
+  <div class="eb-title">Nenhum dado cadastrado ainda</div>
+  <div class="eb-txt">Vá na aba <b>Importar dados</b> e envie as planilhas de vendas diárias (Excel ou PDF). Os gráficos e comparativos são montados automaticamente.</div>
+  <button class="btn primary" id="btnGoImport">Importar dados agora</button>
+</div>
 
 <!-- ============ VISÃO GERAL ============ -->
 <section class="view on" id="view-geral">
@@ -232,7 +241,7 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
     <div class="imp-status" id="impStatus"></div>
     <div class="data-src">
       <span id="dataInfo"></span>
-      <button class="btn ghost" id="btnReset">Restaurar dados originais</button>
+      <button class="btn ghost" id="btnReset">Zerar todos os dados</button>
     </div>
   </div>
 </section>
@@ -241,7 +250,7 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 
 <script>
 /* ================= DADOS BASE (agregados mensais por filial) ================= */
-const DADOS_BASE = {"1 - PONTA GROSSA": {"2022": {"9": 67893.61, "10": 152928.2, "11": 158587.23, "12": 244240.48}, "2023": {"1": 142043.93, "2": 109913.03, "3": 118910.96, "4": 105418.01, "5": 107428.33, "6": 100538.33, "7": 109655.98, "8": 96108.96, "9": 92000.6, "10": 92955.91, "11": 99129.0, "12": 161218.06}, "2024": {"1": 86756.0, "2": 73086.93, "3": 77757.28, "4": 53529.08, "5": 88649.4, "6": 112564.52, "7": 138715.56, "8": 151372.68, "9": 125186.22, "10": 139085.95, "11": 174988.82, "12": 232281.43}, "2025": {"1": 129295.15, "2": 108508.21, "3": 123707.04, "4": 101534.95, "5": 107722.02, "6": 105618.16, "7": 104863.91, "8": 111471.1, "9": 87898.45, "10": 106002.48, "11": 142866.42, "12": 173463.89}}, "2 - PADRE ANCHIETA": {"2022": {"1": 34879.98, "2": 38070.54, "3": 39955.17, "4": 39031.8, "5": 36617.89, "6": 44825.47, "7": 40967.26, "8": 44021.73, "9": 37626.01, "10": 41787.98, "11": 53797.36, "12": 76038.23}, "2023": {"1": 36780.42, "2": 41811.81, "3": 37413.83, "4": 34135.27, "5": 35877.07, "6": 33105.71, "7": 34896.67, "8": 37638.72, "9": 35909.08, "10": 38602.82, "11": 52999.47, "12": 65491.04}, "2024": {"1": 34694.84, "2": 35123.01, "3": 40527.59, "4": 29008.98, "5": 36235.57, "6": 44620.79, "7": 40941.54, "8": 54646.53, "9": 59304.95, "10": 47484.83, "11": 61584.52, "12": 71523.08}, "2025": {"1": 38913.7, "2": 48181.56, "3": 38936.93, "4": 42836.88, "5": 36502.22, "6": 25621.48, "7": 31195.19, "8": 31354.6, "9": 28520.1, "10": 43471.01, "11": 46155.69, "12": 65748.17}}, "4 - JARDIM DAS AMERICAS": {"2022": {"6": 195716.83, "7": 168583.78, "8": 154413.81, "9": 133514.09, "10": 134358.24, "11": 163067.11, "12": 252337.64}, "2023": {"1": 108300.25, "2": 118364.86, "3": 130486.05, "4": 129201.24, "5": 120436.8, "6": 93223.22, "7": 114510.71, "8": 118348.95, "9": 111325.77, "10": 137652.35, "11": 157782.61, "12": 243687.63}, "2024": {"1": 123485.64, "2": 127966.81, "3": 137851.59, "4": 92567.86, "5": 98891.98, "6": 139162.11, "7": 178982.49, "8": 211511.57, "9": 174447.77, "10": 207891.49, "11": 278583.77, "12": 345361.57}, "2025": {"1": 193552.47, "2": 174089.73, "3": 184137.01, "4": 155785.19, "5": 144105.95, "6": 137869.12, "7": 153689.99, "8": 176912.1, "9": 155525.65, "10": 179808.22, "11": 239628.45, "12": 347277.82}}, "5 - UMUARAMA": {"2022": {"11": 168289.35, "12": 261994.66}, "2023": {"1": 176221.09, "2": 150348.58, "3": 119860.37, "4": 140997.04, "5": 127156.05, "6": 123668.36, "7": 126414.86, "8": 111996.11, "9": 112910.2, "10": 120928.19, "11": 138056.08, "12": 170116.32}, "2024": {"1": 110179.35, "2": 102316.32, "3": 99653.98, "4": 72226.99, "5": 82271.66, "6": 106864.42, "7": 133313.2, "8": 140994.68, "9": 137104.33, "10": 146063.35, "11": 172838.38, "12": 217645.62}, "2025": {"1": 140645.34, "2": 118903.78, "3": 124044.19, "4": 109969.65, "5": 97212.21, "6": 87806.48, "7": 89813.17, "8": 88259.41, "9": 77520.59, "10": 90373.05, "11": 132117.5, "12": 159444.95}}, "6 - REPUBLICA ARGENTINA": {"2022": {"1": 120403.47, "2": 151197.6, "3": 146177.21, "4": 123631.47, "5": 138918.47, "6": 137566.82, "7": 134824.14, "8": 133815.47, "9": 116047.72, "10": 160865.15, "11": 175956.21, "12": 240823.44}, "2023": {"1": 132100.97, "2": 131578.64, "3": 162020.32, "4": 131476.38, "5": 130006.74, "6": 119469.07, "7": 117090.93, "8": 125214.65, "9": 113397.65, "10": 139786.52, "11": 182458.72, "12": 185391.43}, "2024": {"1": 106072.69, "2": 130927.28, "3": 137327.99, "4": 99315.91, "5": 102258.25, "6": 137124.27, "7": 150949.09, "8": 193964.76, "9": 203628.28, "10": 202412.2, "11": 253405.81, "12": 249331.51}, "2025": {"1": 170080.09, "2": 170541.04, "3": 153714.67, "4": 157366.78, "5": 157928.36, "6": 156196.76, "7": 159114.71, "8": 149685.65, "9": 142327.78, "10": 183740.48, "11": 209343.43, "12": 255060.62}}, "7 - BATEL 02": {"2024": {"12": 90243.38}, "2025": {"1": 80869.84, "2": 84947.39, "3": 69049.46, "4": 72380.1, "5": 70803.53, "6": 62023.03, "7": 64156.95, "8": 61698.7, "9": 68450.37, "10": 78195.31, "11": 85195.61, "12": 104703.41}}, "8 - PADRE ANCHIETA 02": {"2022": {"1": 96318.24, "2": 107603.37, "3": 111010.98, "4": 102984.17, "5": 127112.85, "6": 124360.46, "7": 115418.61, "8": 121991.61, "9": 113571.28, "10": 127302.46, "11": 149813.6, "12": 190389.94}, "2023": {"1": 103683.34, "2": 108953.11, "3": 122836.01, "4": 96064.4, "5": 112021.49, "6": 106402.35, "7": 105471.14, "8": 123087.15, "9": 107388.58, "10": 105232.73, "11": 131763.78, "12": 164623.04}, "2024": {"1": 93509.82, "2": 113654.1, "3": 104375.31, "4": 95533.28, "5": 98578.86, "6": 118429.18, "7": 127813.73, "8": 192807.11, "9": 160917.62, "10": 166120.23, "11": 219718.86, "12": 244524.68}, "2025": {"1": 144675.6, "2": 161198.57, "3": 159445.55, "4": 149647.54, "5": 145780.37, "6": 141230.91, "7": 151708.16, "8": 138436.28, "9": 152380.64, "10": 171317.71, "11": 210445.39, "12": 244222.24}}, "9 - BATEL": {"2022": {"1": 89425.48, "2": 104256.01, "3": 116050.0, "4": 97099.67, "5": 117005.04, "6": 107094.59, "7": 105469.06, "8": 113837.76, "9": 95925.24, "10": 111788.6, "11": 136630.81, "12": 178586.61}, "2023": {"1": 99901.91, "2": 111316.98, "3": 140388.51, "4": 111548.07, "5": 116111.2, "6": 105872.78, "7": 94079.03, "8": 121081.66, "9": 100791.11, "10": 120399.17, "11": 159478.15, "12": 179211.79}, "2024": {"1": 121446.74, "2": 117495.67, "3": 133042.1, "4": 111471.82, "5": 117548.76, "6": 168749.85, "7": 211949.79, "8": 252037.7, "9": 218806.78, "10": 266871.4, "11": 322989.1, "12": 313035.86}, "2025": {"1": 185733.95, "2": 198128.08, "3": 190979.41, "4": 190596.17, "5": 165172.79, "6": 168256.4, "7": 165829.6, "8": 163134.97, "9": 167865.32, "10": 200435.44, "11": 262407.95, "12": 274628.31}}, "11 - MARECHAL 02": {"2024": {"1": 71530.24, "2": 67621.24, "3": 72227.59, "4": 58073.88, "5": 71923.55, "6": 77794.49, "7": 94953.07, "8": 107952.45, "9": 97732.94, "10": 101869.84, "11": 115954.1, "12": 128953.85}, "2025": {"1": 83799.08, "2": 74821.83, "3": 76975.93, "4": 64025.81, "5": 67623.97, "6": 49991.34, "7": 68527.66, "8": 66527.42, "9": 56742.39, "10": 68772.39, "11": 69982.18, "12": 97345.27}}, "12 - VICENTE MACHADO": {"2022": {"1": 56641.23, "2": 66992.46, "3": 64086.02, "4": 65548.09, "5": 69378.24, "6": 70812.36, "7": 72545.67, "8": 79114.59, "9": 61391.69, "10": 67181.09, "11": 72888.19, "12": 116239.8}, "2023": {"1": 74510.74, "2": 66880.75, "3": 83328.85, "4": 62400.81, "5": 77241.79, "6": 68694.23, "7": 61773.53, "8": 71704.42, "9": 56565.29, "10": 61928.6, "11": 73882.17, "12": 93833.77}, "2024": {"1": 56320.58, "2": 50545.7, "3": 55824.33, "4": 51025.37, "5": 48364.18, "6": 75309.38, "7": 91146.65, "8": 107381.16, "9": 79349.1, "10": 95580.31, "11": 109855.95, "12": 131754.94}, "2025": {"1": 101422.6, "2": 86512.08, "3": 71313.23, "4": 88765.5, "5": 94650.0, "6": 91802.83, "7": 97442.53, "8": 75040.81, "9": 70737.77, "10": 76952.31, "11": 79661.19, "12": 100741.29}}, "13 - SHOPPING ESTAÇÃO": {"2022": {"1": 164271.06, "2": 132616.3, "3": 131762.74, "4": 132563.32, "5": 130268.85, "6": 109646.33, "7": 126003.35, "8": 111676.24, "9": 109209.04, "10": 108697.12, "11": 142930.74, "12": 203056.54}, "2023": {"1": 123161.17, "2": 108373.67, "3": 109453.28, "4": 108613.35, "5": 95497.55, "6": 90248.37, "7": 111389.44, "8": 115933.84, "9": 91729.41, "10": 119782.11, "11": 125005.33, "12": 172644.9}, "2024": {"1": 102364.79, "2": 107212.25, "3": 111334.25, "4": 94995.56, "5": 109570.26, "6": 139032.21, "7": 188196.86, "8": 170692.19, "9": 172535.45, "10": 168077.62, "11": 217654.54, "12": 253345.32}, "2025": {"1": 162949.87, "2": 140963.12, "3": 157950.96, "4": 128788.55, "5": 143449.63, "6": 134205.47, "7": 132595.85, "8": 135161.46, "9": 123417.16, "10": 155441.99, "11": 189148.56, "12": 219615.98}}, "14 - COLOMBO": {"2023": {"7": 20782.69, "8": 148491.57, "9": 125921.41, "10": 126090.8, "11": 114854.48, "12": 160538.24}, "2024": {"1": 76359.1, "2": 68662.45, "3": 80047.25, "4": 61946.29, "5": 71906.51, "6": 86030.09, "7": 89619.41, "8": 111358.4, "9": 86263.01, "10": 114575.52, "11": 165559.21, "12": 196813.17}, "2025": {"1": 119150.5, "2": 119708.56, "3": 111741.85, "4": 114745.35, "5": 116727.66, "6": 121994.75, "7": 113773.45, "8": 112844.86, "9": 102304.84, "10": 115252.88, "11": 168944.52, "12": 224707.4}}, "15 - LONDRINA": {"2024": {"1": 5988.11, "2": 8030.94, "3": 26394.4, "4": 173556.61, "5": 113674.11, "6": 130378.05, "7": 131709.22, "8": 146892.01, "9": 127202.93, "10": 140072.32, "11": 179261.65, "12": 228751.13}, "2025": {"1": 140661.61, "2": 115543.37, "3": 104662.59, "4": 88831.59, "5": 102412.38, "6": 115436.25, "7": 107010.85, "8": 108268.5, "9": 97778.78, "10": 108826.4, "11": 130290.65, "12": 184759.55}}, "17 - TIJUCAS": {"2025": {"5": 18561.74, "6": 233309.97, "7": 157954.74, "8": 150862.83, "9": 131161.15, "10": 121967.62, "11": 182343.41, "12": 187384.86}}};
+const DADOS_BASE = {}; // sistema inicia zerado — os dados entram pela aba Importar
 
 /* ================= CONFIGURAÇÃO DO BACKEND (Google Apps Script) =================
    1. Publique o Code.gs como App da Web (Executar como: você / Acesso: Qualquer pessoa)
@@ -267,11 +276,12 @@ function setBadge(cls,txt){
   document.getElementById('syncTxt').textContent=txt;
 }
 function loadLocal(){
+  try{ localStorage.removeItem('miashop_vendas_v1'); }catch(e){} // limpa cache de versões antigas
   try{
-    const s = localStorage.getItem('miashop_vendas_v1');
+    const s = localStorage.getItem('miashop_vendas_v2');
     if(s){ const o = JSON.parse(s); if(o && typeof o==='object' && Object.keys(o).length) return o; }
   }catch(e){}
-  return JSON.parse(JSON.stringify(DADOS_BASE));
+  return {};
 }
 async function apiCarregar(){
   const r = await fetch(API_URL+'?acao=carregar',{method:'GET'});
@@ -285,7 +295,7 @@ async function apiSalvar(){
   if(j && j.ok===false) throw new Error(j.erro||'erro ao salvar');
 }
 async function saveData(){
-  try{ localStorage.setItem('miashop_vendas_v1', JSON.stringify(dados)); }catch(e){}
+  try{ localStorage.setItem('miashop_vendas_v2', JSON.stringify(dados)); }catch(e){}
   if(!apiConfigurada()) return;
   setBadge('busy','Salvando na planilha…');
   try{ await apiSalvar(); online=true; setBadge('ok','Sincronizado com a planilha'); }
@@ -296,13 +306,7 @@ async function init(){
     setBadge('busy','Carregando da planilha…');
     try{
       const remoto = await apiCarregar();
-      if(remoto && typeof remoto==='object' && Object.keys(remoto).length){
-        dados = remoto;
-      }else{
-        // planilha vazia: semeia com os dados originais embutidos
-        dados = JSON.parse(JSON.stringify(DADOS_BASE));
-        await apiSalvar();
-      }
+      dados = (remoto && typeof remoto==='object') ? remoto : {};
       online = true; setBadge('ok','Sincronizado com a planilha');
     }catch(e){
       online = false; dados = loadLocal();
@@ -439,7 +443,7 @@ function renderGeral(){
 
 /* ================= RENDER: POR FILIAL ================= */
 function renderFilial(){
-  document.getElementById('ttFilial').textContent='Evolução mensal — '+selBranch;
+  document.getElementById('ttFilial').textContent='Evolução mensal'+(selBranch?' — '+selBranch:'');
   const k=document.getElementById('kpisFilial'); k.innerHTML='';
   selYears.forEach(y=>{
     const t=yearTotal(selBranch,y); const py=prevSelYear(y); const p=py?pct(t,yearTotal(selBranch,py)):null;
@@ -620,10 +624,10 @@ async function mergePending(){
     st.innerHTML='<div class="alert ok">Dados incorporados e salvos na planilha do Google — disponíveis em qualquer computador.</div>';
 }
 document.getElementById('btnReset').onclick=async()=>{
-  if(!confirm('Descartar todos os dados importados e voltar aos dados originais?')) return;
-  dados=JSON.parse(JSON.stringify(DADOS_BASE));
-  try{ localStorage.removeItem('miashop_vendas_v1'); }catch(e){}
-  st.innerHTML='<div class="alert ok">Dados originais restaurados.</div>';
+  if(!confirm('Apagar TODOS os dados do sistema (inclusive na planilha do Google)? Esta ação não pode ser desfeita.')) return;
+  dados={};
+  try{ localStorage.removeItem('miashop_vendas_v2'); }catch(e){}
+  st.innerHTML='<div class="alert ok">Sistema zerado. Use a importação acima para carregar novos dados.</div>';
   buildFilters(); updateDataInfo(); render();
   await saveData();
 };
@@ -664,6 +668,11 @@ async function pdfToMatrix(file){
 
 function updateDataInfo(){
   const ys=allYears(), brs=allBranches();
+  if(!brs.length){
+    const modo0 = apiConfigurada() ? (online?'conectado à planilha do Google':'sem conexão com a planilha') : 'modo local';
+    document.getElementById('dataInfo').innerHTML = `Base atual: <b>vazia</b> · ${modo0}`;
+    return;
+  }
   const modo = apiConfigurada()
     ? (online ? 'salvos na planilha do Google (aba “Dados”, um valor por célula)' : 'modo local — sem conexão com a planilha')
     : 'modo local — configure a API_URL no arquivo para sincronizar';
@@ -674,10 +683,13 @@ function updateDataInfo(){
 /* ================= RENDER ROOT ================= */
 function render(){
   if(!dados) return; // ainda carregando
+  const vazio = !allBranches().length;
+  document.getElementById('emptyBanner').style.display = (vazio && curView!=='importar') ? '' : 'none';
   if(curView==='geral') renderGeral();
   else if(curView==='filial') renderFilial();
   else if(curView==='mes') renderMes();
 }
+document.getElementById('btnGoImport').onclick=()=>document.querySelector('#nav button[data-view="importar"]').click();
 init();
 </script>
 </body>
