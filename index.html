@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Miashop · Comparativo de Vendas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --ink:#10333B; --ink-2:#1C4A54; --paper:#F2F4F3; --card:#FFFFFF;
+  --line:#E1E6E4; --txt:#22333A; --muted:#6B7C82;
+  --pos:#0E7A55; --pos-bg:#DFF2E9; --neg:#B4322E; --neg-bg:#FBE5E3;
+  --chip:#EEF2F1;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--paper);color:var(--txt);font-size:14px}
+h1,h2,h3,.display{font-family:'Archivo',sans-serif}
+.num{font-variant-numeric:tabular-nums}
+
+/* ===== Header ===== */
+header{background:var(--ink);color:#fff;padding:0 22px}
+.hd-top{display:flex;align-items:center;gap:14px;padding:16px 0 10px;flex-wrap:wrap}
+.logo{font-family:'Archivo';font-weight:800;font-size:21px;letter-spacing:-.02em}
+.logo span{color:#5FD3B8}
+.hd-sub{font-size:12.5px;color:#A9C4C0;font-weight:500}
+nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:0}
+nav button{appearance:none;border:0;background:transparent;color:#B7CCC9;font:600 13.5px 'Archivo';padding:11px 15px;cursor:pointer;border-radius:9px 9px 0 0;white-space:nowrap;border-bottom:3px solid transparent}
+nav button:hover{color:#fff}
+nav button.on{color:#fff;background:var(--paper);color:var(--ink);border-bottom-color:#5FD3B8}
+nav button:focus-visible{outline:2px solid #5FD3B8;outline-offset:-2px}
+.sync{margin-left:auto;display:flex;align-items:center;gap:7px;font:600 12px 'Inter';color:#B7CCC9;background:rgba(255,255,255,.08);border-radius:99px;padding:5px 12px}
+.sync .sdot{width:8px;height:8px;border-radius:99px;background:#8FA6A3}
+.sync.ok .sdot{background:#5FD3B8}
+.sync.err .sdot{background:#F08A7E}
+.sync.warn .sdot{background:#E8C35A}
+.sync.busy .sdot{background:#5FD3B8;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+
+/* ===== Filter bar ===== */
+.filters{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--card);border-bottom:1px solid var(--line)}
+.f-group{display:flex;align-items:center;gap:8px}
+.f-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.yr-chips{display:flex;gap:6px;flex-wrap:wrap}
+.yr-chip{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:5px 13px;font:600 13px 'Inter';cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:7px}
+.yr-chip .dot{width:9px;height:9px;border-radius:99px;background:#ccc}
+.yr-chip.on{color:#fff;border-color:transparent}
+select{border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;font:600 13px 'Inter';background:#fff;color:var(--txt);cursor:pointer;max-width:260px}
+select:focus-visible,.yr-chip:focus-visible,button:focus-visible{outline:2px solid var(--ink-2);outline-offset:1px}
+
+/* ===== Layout ===== */
+main{padding:20px 22px 60px;max-width:1280px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+.grid-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px 17px;border-top:4px solid var(--yc,#ccc)}
+.kpi .y{font:700 13px 'Archivo';color:var(--muted)}
+.kpi .v{font:800 21px 'Archivo';margin:5px 0 6px;letter-spacing:-.01em}
+.kpi .note{font-size:11.5px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:18px}
+.card h2{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.card .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+.card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.chart-wrap{position:relative;height:340px}
+.chart-wrap.tall{height:420px}
+
+/* ===== Delta pill (signature) ===== */
+.pill{display:inline-flex;align-items:center;gap:3px;font:700 11px 'Inter';border-radius:99px;padding:2.5px 8px;white-space:nowrap}
+.pill.up{background:var(--pos-bg);color:var(--pos)}
+.pill.down{background:var(--neg-bg);color:var(--neg)}
+.pill.flat{background:var(--chip);color:var(--muted)}
+
+/* ===== Tables ===== */
+.tbl-scroll{overflow-x:auto;margin:0 -6px;padding:0 6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{font:700 11px 'Inter';letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:right;padding:9px 12px;border-bottom:2px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--card)}
+td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+td .cellv{font-weight:600}
+td .sm{display:block;margin-top:2px}
+tr:hover td{background:#F7FAF9}
+tr:hover td:first-child{background:#F7FAF9}
+tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
+.br-name{font-weight:700;color:var(--ink)}
+.mono-muted{color:var(--muted);font-weight:500}
+
+/* ===== Import ===== */
+.dropzone{border:2.5px dashed #B8C7C3;border-radius:var(--r);background:#FBFDFC;padding:44px 20px;text-align:center;cursor:pointer;transition:all .15s}
+.dropzone:hover,.dropzone.drag{border-color:var(--ink-2);background:#F0F6F4}
+.dropzone .big{font:700 16px 'Archivo';margin-bottom:6px}
+.dropzone .fmt{font-size:12.5px;color:var(--muted)}
+.btn{appearance:none;border:0;border-radius:10px;padding:10px 18px;font:700 13.5px 'Archivo';cursor:pointer}
+.btn.primary{background:var(--ink);color:#fff}
+.btn.primary:hover{background:var(--ink-2)}
+.btn.ghost{background:transparent;color:var(--neg);border:1.5px solid var(--line)}
+.btn.ghost:hover{background:var(--neg-bg)}
+.imp-status{margin-top:16px}
+.imp-box{border:1px solid var(--line);border-radius:12px;padding:16px;background:#FBFDFC}
+.imp-box h3{font-size:14px;margin-bottom:8px}
+.imp-box ul{list-style:none;font-size:13px;color:var(--muted)}
+.imp-box li{padding:3px 0}
+.imp-box li b{color:var(--txt)}
+.imp-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.alert{border-radius:10px;padding:11px 14px;font-size:13px;font-weight:500;margin-top:12px}
+.alert.ok{background:var(--pos-bg);color:var(--pos)}
+.alert.err{background:var(--neg-bg);color:var(--neg)}
+.data-src{font-size:12px;color:var(--muted);margin-top:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+
+@media (max-width:640px){
+  main{padding:14px 12px 50px}
+  .filters{padding:12px}
+  .chart-wrap{height:280px}
+  header{padding:0 12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd-top">
+    <div class="logo">Miashop<span>.</span></div>
+    <div class="hd-sub">Comparativo de vendas por filial · evolução ano a ano</div>
+    <div class="sync" id="syncBadge"><span class="sdot"></span><span id="syncTxt">Carregando…</span></div>
+  </div>
+  <nav id="nav">
+    <button data-view="geral" class="on">Visão geral</button>
+    <button data-view="filial">Por filial</button>
+    <button data-view="mes">Comparativo mensal</button>
+    <button data-view="importar">Importar dados</button>
+  </nav>
+</header>
+
+<div class="filters" id="filterBar">
+  <div class="f-group">
+    <span class="f-label">Anos</span>
+    <div class="yr-chips" id="yrChips"></div>
+  </div>
+  <div class="f-group" id="fgFilial" style="display:none">
+    <span class="f-label">Filial</span>
+    <select id="selFilial"></select>
+  </div>
+  <div class="f-group" id="fgMes" style="display:none">
+    <span class="f-label">Mês</span>
+    <select id="selMes"></select>
+  </div>
+</div>
+
+<main>
+
+<!-- ============ VISÃO GERAL ============ -->
+<section class="view on" id="view-geral">
+  <div class="grid-kpi" id="kpis"></div>
+
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Vendas mensais consolidadas — todas as filiais</h2>
+      <div class="sub">Soma de todas as filiais mês a mês. Cada linha é um ano.</div></div>
+    </div>
+    <div class="chart-wrap"><canvas id="chConsolidado"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Total anual por filial</h2>
+      <div class="sub">Comparação do faturamento anual de cada filial entre os anos selecionados.</div></div>
+    </div>
+    <div class="chart-wrap tall"><canvas id="chFiliaisAno"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Matriz filial × ano</h2>
+      <div class="sub">Total anual com variação % sobre o ano anterior. Filiais sem movimento no período aparecem com “—”.</div></div>
+    </div>
+    <div class="tbl-scroll"><table id="tblMatriz"></table></div>
+  </div>
+</section>
+
+<!-- ============ POR FILIAL ============ -->
+<section class="view" id="view-filial">
+  <div class="grid-kpi" id="kpisFilial"></div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2 id="ttFilial">Evolução mensal</h2>
+      <div class="sub">Vendas mês a mês da filial selecionada, um ano sobre o outro.</div></div>
+    </div>
+    <div class="chart-wrap"><canvas id="chFilial"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Tabela mensal com variação ano a ano</h2>
+      <div class="sub">A variação % de cada célula compara com o mesmo mês do ano anterior selecionado.</div></div>
+    </div>
+    <div class="tbl-scroll"><table id="tblFilial"></table></div>
+  </div>
+</section>
+
+<!-- ============ COMPARATIVO MENSAL ============ -->
+<section class="view" id="view-mes">
+  <div class="card">
+    <div class="card-hd">
+      <div><h2 id="ttMes">Comparativo do mês</h2>
+      <div class="sub">Vendas de todas as filiais no mês selecionado, comparando os anos.</div></div>
+    </div>
+    <div class="chart-wrap tall"><canvas id="chMes"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Tabela do mês por filial</h2>
+      <div class="sub">Variação % sobre o mesmo mês do ano anterior.</div></div>
+    </div>
+    <div class="tbl-scroll"><table id="tblMes"></table></div>
+  </div>
+</section>
+
+<!-- ============ IMPORTAR ============ -->
+<section class="view" id="view-importar">
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Importar novos dados</h2>
+      <div class="sub">Aceita Excel (.xlsx/.xls/.csv) e PDF no mesmo formato das planilhas de vendas diárias: primeira coluna <b>Data</b> (dd/mm/aaaa) e uma coluna por filial.</div></div>
+    </div>
+    <div class="dropzone" id="dz" tabindex="0" role="button" aria-label="Selecionar arquivo para importar">
+      <div class="big">Arraste o arquivo aqui ou clique para selecionar</div>
+      <div class="fmt">Excel (.xlsx, .xls, .csv) ou PDF · os valores diários são somados por mês automaticamente</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.pdf" style="display:none">
+    <div class="imp-status" id="impStatus"></div>
+    <div class="data-src">
+      <span id="dataInfo"></span>
+      <button class="btn ghost" id="btnReset">Restaurar dados originais</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+/* ================= DADOS BASE (agregados mensais por filial) ================= */
+const DADOS_BASE = {"1 - PONTA GROSSA": {"2022": {"9": 67893.61, "10": 152928.2, "11": 158587.23, "12": 244240.48}, "2023": {"1": 142043.93, "2": 109913.03, "3": 118910.96, "4": 105418.01, "5": 107428.33, "6": 100538.33, "7": 109655.98, "8": 96108.96, "9": 92000.6, "10": 92955.91, "11": 99129.0, "12": 161218.06}, "2024": {"1": 86756.0, "2": 73086.93, "3": 77757.28, "4": 53529.08, "5": 88649.4, "6": 112564.52, "7": 138715.56, "8": 151372.68, "9": 125186.22, "10": 139085.95, "11": 174988.82, "12": 232281.43}, "2025": {"1": 129295.15, "2": 108508.21, "3": 123707.04, "4": 101534.95, "5": 107722.02, "6": 105618.16, "7": 104863.91, "8": 111471.1, "9": 87898.45, "10": 106002.48, "11": 142866.42, "12": 173463.89}}, "2 - PADRE ANCHIETA": {"2022": {"1": 34879.98, "2": 38070.54, "3": 39955.17, "4": 39031.8, "5": 36617.89, "6": 44825.47, "7": 40967.26, "8": 44021.73, "9": 37626.01, "10": 41787.98, "11": 53797.36, "12": 76038.23}, "2023": {"1": 36780.42, "2": 41811.81, "3": 37413.83, "4": 34135.27, "5": 35877.07, "6": 33105.71, "7": 34896.67, "8": 37638.72, "9": 35909.08, "10": 38602.82, "11": 52999.47, "12": 65491.04}, "2024": {"1": 34694.84, "2": 35123.01, "3": 40527.59, "4": 29008.98, "5": 36235.57, "6": 44620.79, "7": 40941.54, "8": 54646.53, "9": 59304.95, "10": 47484.83, "11": 61584.52, "12": 71523.08}, "2025": {"1": 38913.7, "2": 48181.56, "3": 38936.93, "4": 42836.88, "5": 36502.22, "6": 25621.48, "7": 31195.19, "8": 31354.6, "9": 28520.1, "10": 43471.01, "11": 46155.69, "12": 65748.17}}, "4 - JARDIM DAS AMERICAS": {"2022": {"6": 195716.83, "7": 168583.78, "8": 154413.81, "9": 133514.09, "10": 134358.24, "11": 163067.11, "12": 252337.64}, "2023": {"1": 108300.25, "2": 118364.86, "3": 130486.05, "4": 129201.24, "5": 120436.8, "6": 93223.22, "7": 114510.71, "8": 118348.95, "9": 111325.77, "10": 137652.35, "11": 157782.61, "12": 243687.63}, "2024": {"1": 123485.64, "2": 127966.81, "3": 137851.59, "4": 92567.86, "5": 98891.98, "6": 139162.11, "7": 178982.49, "8": 211511.57, "9": 174447.77, "10": 207891.49, "11": 278583.77, "12": 345361.57}, "2025": {"1": 193552.47, "2": 174089.73, "3": 184137.01, "4": 155785.19, "5": 144105.95, "6": 137869.12, "7": 153689.99, "8": 176912.1, "9": 155525.65, "10": 179808.22, "11": 239628.45, "12": 347277.82}}, "5 - UMUARAMA": {"2022": {"11": 168289.35, "12": 261994.66}, "2023": {"1": 176221.09, "2": 150348.58, "3": 119860.37, "4": 140997.04, "5": 127156.05, "6": 123668.36, "7": 126414.86, "8": 111996.11, "9": 112910.2, "10": 120928.19, "11": 138056.08, "12": 170116.32}, "2024": {"1": 110179.35, "2": 102316.32, "3": 99653.98, "4": 72226.99, "5": 82271.66, "6": 106864.42, "7": 133313.2, "8": 140994.68, "9": 137104.33, "10": 146063.35, "11": 172838.38, "12": 217645.62}, "2025": {"1": 140645.34, "2": 118903.78, "3": 124044.19, "4": 109969.65, "5": 97212.21, "6": 87806.48, "7": 89813.17, "8": 88259.41, "9": 77520.59, "10": 90373.05, "11": 132117.5, "12": 159444.95}}, "6 - REPUBLICA ARGENTINA": {"2022": {"1": 120403.47, "2": 151197.6, "3": 146177.21, "4": 123631.47, "5": 138918.47, "6": 137566.82, "7": 134824.14, "8": 133815.47, "9": 116047.72, "10": 160865.15, "11": 175956.21, "12": 240823.44}, "2023": {"1": 132100.97, "2": 131578.64, "3": 162020.32, "4": 131476.38, "5": 130006.74, "6": 119469.07, "7": 117090.93, "8": 125214.65, "9": 113397.65, "10": 139786.52, "11": 182458.72, "12": 185391.43}, "2024": {"1": 106072.69, "2": 130927.28, "3": 137327.99, "4": 99315.91, "5": 102258.25, "6": 137124.27, "7": 150949.09, "8": 193964.76, "9": 203628.28, "10": 202412.2, "11": 253405.81, "12": 249331.51}, "2025": {"1": 170080.09, "2": 170541.04, "3": 153714.67, "4": 157366.78, "5": 157928.36, "6": 156196.76, "7": 159114.71, "8": 149685.65, "9": 142327.78, "10": 183740.48, "11": 209343.43, "12": 255060.62}}, "7 - BATEL 02": {"2024": {"12": 90243.38}, "2025": {"1": 80869.84, "2": 84947.39, "3": 69049.46, "4": 72380.1, "5": 70803.53, "6": 62023.03, "7": 64156.95, "8": 61698.7, "9": 68450.37, "10": 78195.31, "11": 85195.61, "12": 104703.41}}, "8 - PADRE ANCHIETA 02": {"2022": {"1": 96318.24, "2": 107603.37, "3": 111010.98, "4": 102984.17, "5": 127112.85, "6": 124360.46, "7": 115418.61, "8": 121991.61, "9": 113571.28, "10": 127302.46, "11": 149813.6, "12": 190389.94}, "2023": {"1": 103683.34, "2": 108953.11, "3": 122836.01, "4": 96064.4, "5": 112021.49, "6": 106402.35, "7": 105471.14, "8": 123087.15, "9": 107388.58, "10": 105232.73, "11": 131763.78, "12": 164623.04}, "2024": {"1": 93509.82, "2": 113654.1, "3": 104375.31, "4": 95533.28, "5": 98578.86, "6": 118429.18, "7": 127813.73, "8": 192807.11, "9": 160917.62, "10": 166120.23, "11": 219718.86, "12": 244524.68}, "2025": {"1": 144675.6, "2": 161198.57, "3": 159445.55, "4": 149647.54, "5": 145780.37, "6": 141230.91, "7": 151708.16, "8": 138436.28, "9": 152380.64, "10": 171317.71, "11": 210445.39, "12": 244222.24}}, "9 - BATEL": {"2022": {"1": 89425.48, "2": 104256.01, "3": 116050.0, "4": 97099.67, "5": 117005.04, "6": 107094.59, "7": 105469.06, "8": 113837.76, "9": 95925.24, "10": 111788.6, "11": 136630.81, "12": 178586.61}, "2023": {"1": 99901.91, "2": 111316.98, "3": 140388.51, "4": 111548.07, "5": 116111.2, "6": 105872.78, "7": 94079.03, "8": 121081.66, "9": 100791.11, "10": 120399.17, "11": 159478.15, "12": 179211.79}, "2024": {"1": 121446.74, "2": 117495.67, "3": 133042.1, "4": 111471.82, "5": 117548.76, "6": 168749.85, "7": 211949.79, "8": 252037.7, "9": 218806.78, "10": 266871.4, "11": 322989.1, "12": 313035.86}, "2025": {"1": 185733.95, "2": 198128.08, "3": 190979.41, "4": 190596.17, "5": 165172.79, "6": 168256.4, "7": 165829.6, "8": 163134.97, "9": 167865.32, "10": 200435.44, "11": 262407.95, "12": 274628.31}}, "11 - MARECHAL 02": {"2024": {"1": 71530.24, "2": 67621.24, "3": 72227.59, "4": 58073.88, "5": 71923.55, "6": 77794.49, "7": 94953.07, "8": 107952.45, "9": 97732.94, "10": 101869.84, "11": 115954.1, "12": 128953.85}, "2025": {"1": 83799.08, "2": 74821.83, "3": 76975.93, "4": 64025.81, "5": 67623.97, "6": 49991.34, "7": 68527.66, "8": 66527.42, "9": 56742.39, "10": 68772.39, "11": 69982.18, "12": 97345.27}}, "12 - VICENTE MACHADO": {"2022": {"1": 56641.23, "2": 66992.46, "3": 64086.02, "4": 65548.09, "5": 69378.24, "6": 70812.36, "7": 72545.67, "8": 79114.59, "9": 61391.69, "10": 67181.09, "11": 72888.19, "12": 116239.8}, "2023": {"1": 74510.74, "2": 66880.75, "3": 83328.85, "4": 62400.81, "5": 77241.79, "6": 68694.23, "7": 61773.53, "8": 71704.42, "9": 56565.29, "10": 61928.6, "11": 73882.17, "12": 93833.77}, "2024": {"1": 56320.58, "2": 50545.7, "3": 55824.33, "4": 51025.37, "5": 48364.18, "6": 75309.38, "7": 91146.65, "8": 107381.16, "9": 79349.1, "10": 95580.31, "11": 109855.95, "12": 131754.94}, "2025": {"1": 101422.6, "2": 86512.08, "3": 71313.23, "4": 88765.5, "5": 94650.0, "6": 91802.83, "7": 97442.53, "8": 75040.81, "9": 70737.77, "10": 76952.31, "11": 79661.19, "12": 100741.29}}, "13 - SHOPPING ESTAÇÃO": {"2022": {"1": 164271.06, "2": 132616.3, "3": 131762.74, "4": 132563.32, "5": 130268.85, "6": 109646.33, "7": 126003.35, "8": 111676.24, "9": 109209.04, "10": 108697.12, "11": 142930.74, "12": 203056.54}, "2023": {"1": 123161.17, "2": 108373.67, "3": 109453.28, "4": 108613.35, "5": 95497.55, "6": 90248.37, "7": 111389.44, "8": 115933.84, "9": 91729.41, "10": 119782.11, "11": 125005.33, "12": 172644.9}, "2024": {"1": 102364.79, "2": 107212.25, "3": 111334.25, "4": 94995.56, "5": 109570.26, "6": 139032.21, "7": 188196.86, "8": 170692.19, "9": 172535.45, "10": 168077.62, "11": 217654.54, "12": 253345.32}, "2025": {"1": 162949.87, "2": 140963.12, "3": 157950.96, "4": 128788.55, "5": 143449.63, "6": 134205.47, "7": 132595.85, "8": 135161.46, "9": 123417.16, "10": 155441.99, "11": 189148.56, "12": 219615.98}}, "14 - COLOMBO": {"2023": {"7": 20782.69, "8": 148491.57, "9": 125921.41, "10": 126090.8, "11": 114854.48, "12": 160538.24}, "2024": {"1": 76359.1, "2": 68662.45, "3": 80047.25, "4": 61946.29, "5": 71906.51, "6": 86030.09, "7": 89619.41, "8": 111358.4, "9": 86263.01, "10": 114575.52, "11": 165559.21, "12": 196813.17}, "2025": {"1": 119150.5, "2": 119708.56, "3": 111741.85, "4": 114745.35, "5": 116727.66, "6": 121994.75, "7": 113773.45, "8": 112844.86, "9": 102304.84, "10": 115252.88, "11": 168944.52, "12": 224707.4}}, "15 - LONDRINA": {"2024": {"1": 5988.11, "2": 8030.94, "3": 26394.4, "4": 173556.61, "5": 113674.11, "6": 130378.05, "7": 131709.22, "8": 146892.01, "9": 127202.93, "10": 140072.32, "11": 179261.65, "12": 228751.13}, "2025": {"1": 140661.61, "2": 115543.37, "3": 104662.59, "4": 88831.59, "5": 102412.38, "6": 115436.25, "7": 107010.85, "8": 108268.5, "9": 97778.78, "10": 108826.4, "11": 130290.65, "12": 184759.55}}, "17 - TIJUCAS": {"2025": {"5": 18561.74, "6": 233309.97, "7": 157954.74, "8": 150862.83, "9": 131161.15, "10": 121967.62, "11": 182343.41, "12": 187384.86}}};
+
+/* ================= CONFIGURAÇÃO DO BACKEND (Google Apps Script) =================
+   1. Publique o Code.gs como App da Web (Executar como: você / Acesso: Qualquer pessoa)
+   2. Cole abaixo a URL de implantação (termina com /exec)                          */
+const API_URL = 'COLE_AQUI_A_URL_DO_APPS_SCRIPT';
+
+/* ================= ESTADO ================= */
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const YEAR_COLORS = ['#98A6B3','#D98E2B','#1E9E8E','#2F55D4','#8A4FBF','#C24573','#5B7F2E','#B4632B'];
+let dados = null;         // carregado no init()
+let online = false;       // conectado ao Apps Script?
+let selYears = [];        // anos selecionados
+let selBranch = null;     // filial selecionada
+let selMonth = new Date().getMonth()+1;
+let curView = 'geral';
+const charts = {};
+
+/* ================= SINCRONIZAÇÃO ================= */
+const apiConfigurada = () => /^https:\/\/script\.google(usercontent)?\.com\/.+/.test(API_URL);
+function setBadge(cls,txt){
+  const b=document.getElementById('syncBadge');
+  b.className='sync '+cls;
+  document.getElementById('syncTxt').textContent=txt;
+}
+function loadLocal(){
+  try{
+    const s = localStorage.getItem('miashop_vendas_v1');
+    if(s){ const o = JSON.parse(s); if(o && typeof o==='object' && Object.keys(o).length) return o; }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(DADOS_BASE));
+}
+async function apiCarregar(){
+  const r = await fetch(API_URL+'?acao=carregar',{method:'GET'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function apiSalvar(){
+  const r = await fetch(API_URL,{method:'POST',body:JSON.stringify({acao:'salvar',dados})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json().catch(()=>({ok:true}));
+  if(j && j.ok===false) throw new Error(j.erro||'erro ao salvar');
+}
+async function saveData(){
+  try{ localStorage.setItem('miashop_vendas_v1', JSON.stringify(dados)); }catch(e){}
+  if(!apiConfigurada()) return;
+  setBadge('busy','Salvando na planilha…');
+  try{ await apiSalvar(); online=true; setBadge('ok','Sincronizado com a planilha'); }
+  catch(e){ online=false; setBadge('err','Falha ao salvar — dados guardados neste navegador'); }
+}
+async function init(){
+  if(apiConfigurada()){
+    setBadge('busy','Carregando da planilha…');
+    try{
+      const remoto = await apiCarregar();
+      if(remoto && typeof remoto==='object' && Object.keys(remoto).length){
+        dados = remoto;
+      }else{
+        // planilha vazia: semeia com os dados originais embutidos
+        dados = JSON.parse(JSON.stringify(DADOS_BASE));
+        await apiSalvar();
+      }
+      online = true; setBadge('ok','Sincronizado com a planilha');
+    }catch(e){
+      online = false; dados = loadLocal();
+      setBadge('err','Sem conexão com a planilha — modo local');
+    }
+  }else{
+    dados = loadLocal();
+    setBadge('warn','Backend não configurado — modo local');
+  }
+  buildFilters(); updateDataInfo(); render();
+}
+
+/* ================= HELPERS ================= */
+const fmtBRL = v => v==null ? '—' : v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const fmtBRL2 = v => v==null ? '—' : v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
+function allYears(){ const s=new Set(); for(const b in dados) for(const y in dados[b]) s.add(+y); return [...s].sort(); }
+function allBranches(){ return Object.keys(dados).sort((a,b)=>parseInt(a)-parseInt(b)); }
+function yColor(y){ const ys=allYears(); return YEAR_COLORS[ys.indexOf(+y)%YEAR_COLORS.length]; }
+function monthVal(br,y,m){ const v = dados[br]?.[y]?.[m]; return (v && v>0)? v : null; }
+function yearTotal(br,y){ let t=0,has=false; for(let m=1;m<=12;m++){const v=monthVal(br,String(y),String(m)); if(v){t+=v;has=true;}} return has? t : null; }
+function companyMonth(y,m){ let t=0,has=false; for(const b of allBranches()){const v=monthVal(b,String(y),String(m)); if(v){t+=v;has=true;}} return has? t:null; }
+function companyYear(y){ let t=0,has=false; for(let m=1;m<=12;m++){const v=companyMonth(y,m); if(v){t+=v;has=true;}} return has? t:null; }
+function pct(cur,prev){ if(cur==null||prev==null||prev===0) return null; return (cur-prev)/prev*100; }
+function pillHTML(p){
+  if(p==null) return '<span class="pill flat">—</span>';
+  const cls = p>0.05?'up':(p<-0.05?'down':'flat');
+  const arrow = p>0.05?'▲':(p<-0.05?'▼':'•');
+  return `<span class="pill ${cls}">${arrow} ${Math.abs(p).toLocaleString('pt-BR',{maximumFractionDigits:1})}%</span>`;
+}
+function prevSelYear(y){ const i=selYears.indexOf(y); return i>0? selYears[i-1] : null; }
+
+/* ================= FILTROS ================= */
+function buildFilters(){
+  const ys = allYears();
+  if(!selYears.length) selYears=[...ys];
+  selYears = selYears.filter(y=>ys.includes(y)); if(!selYears.length) selYears=[...ys];
+  const wrap = document.getElementById('yrChips'); wrap.innerHTML='';
+  ys.forEach(y=>{
+    const b=document.createElement('button'); b.className='yr-chip'+(selYears.includes(y)?' on':'');
+    const c=yColor(y);
+    if(selYears.includes(y)) b.style.background=c;
+    b.innerHTML=`<span class="dot" style="background:${selYears.includes(y)?'rgba(255,255,255,.85)':c}"></span>${y}`;
+    b.onclick=()=>{
+      if(selYears.includes(y)){ if(selYears.length>1) selYears=selYears.filter(x=>x!==y); }
+      else { selYears.push(y); selYears.sort(); }
+      buildFilters(); render();
+    };
+    wrap.appendChild(b);
+  });
+  const sf=document.getElementById('selFilial'); const brs=allBranches();
+  if(!selBranch || !brs.includes(selBranch)) selBranch=brs[0];
+  sf.innerHTML = brs.map(b=>`<option ${b===selBranch?'selected':''}>${b}</option>`).join('');
+  const sm=document.getElementById('selMes');
+  sm.innerHTML = MESES.map((m,i)=>`<option value="${i+1}" ${i+1===selMonth?'selected':''}>${m}</option>`).join('');
+}
+document.getElementById('selFilial').onchange=e=>{selBranch=e.target.value;render();};
+document.getElementById('selMes').onchange=e=>{selMonth=+e.target.value;render();};
+
+/* ================= NAV ================= */
+document.getElementById('nav').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  curView=b.dataset.view;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='view-'+curView));
+  document.getElementById('fgFilial').style.display = curView==='filial'?'':'none';
+  document.getElementById('fgMes').style.display = curView==='mes'?'':'none';
+  render();
+});
+
+/* ================= CHART BASE ================= */
+Chart.defaults.font.family="'Inter',sans-serif";
+Chart.defaults.color='#6B7C82';
+function mkChart(id,cfg){ if(charts[id]) charts[id].destroy(); charts[id]=new Chart(document.getElementById(id),cfg); }
+const tipMoney = { callbacks:{ label:c=>` ${c.dataset.label}: ${fmtBRL2(c.parsed.y ?? c.parsed.x)}` } };
+const axisMoney = { ticks:{ callback:v=>v>=1e6?(v/1e6).toLocaleString('pt-BR')+' mi':(v/1e3).toLocaleString('pt-BR')+' mil' }, grid:{color:'#EDF1F0'} };
+
+/* ================= RENDER: VISÃO GERAL ================= */
+function renderGeral(){
+  // KPIs por ano
+  const k=document.getElementById('kpis'); k.innerHTML='';
+  selYears.forEach(y=>{
+    const t=companyYear(y);
+    const py=prevSelYear(y); const pt=py?companyYear(py):null;
+    const p=pct(t,pt);
+    k.insertAdjacentHTML('beforeend',
+      `<div class="kpi" style="--yc:${yColor(y)}">
+        <div class="y">Total ${y}</div>
+        <div class="v num">${fmtBRL(t)}</div>
+        <div class="note">${py? `${pillHTML(p)} <span style="margin-left:4px">vs ${py}</span>` : 'primeiro ano selecionado'}</div>
+      </div>`);
+  });
+
+  // Linhas consolidadas
+  mkChart('chConsolidado',{
+    type:'line',
+    data:{labels:MESES,datasets:selYears.map(y=>({
+      label:String(y), data:MESES.map((_,i)=>companyMonth(y,i+1)),
+      borderColor:yColor(y), backgroundColor:yColor(y), tension:.3, spanGaps:true,
+      pointRadius:3, pointHoverRadius:5, borderWidth:2.5
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
+      scales:{y:axisMoney,x:{grid:{display:false}}}}
+  });
+
+  // Barras: total anual por filial
+  const brs=allBranches();
+  mkChart('chFiliaisAno',{
+    type:'bar',
+    data:{labels:brs.map(b=>b.replace(/^\d+\s-\s/,'')),datasets:selYears.map(y=>({
+      label:String(y),data:brs.map(b=>yearTotal(b,y)),backgroundColor:yColor(y),borderRadius:4,maxBarThickness:26
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
+      scales:{y:axisMoney,x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:60,minRotation:35,font:{size:11}}}}}
+  });
+
+  // Matriz
+  let h='<thead><tr><th>Filial</th>'+selYears.map(y=>`<th style="color:${yColor(y)}">${y}</th>`).join('')+'</tr></thead><tbody>';
+  brs.forEach(b=>{
+    h+=`<tr><td class="br-name">${b}</td>`;
+    selYears.forEach(y=>{
+      const t=yearTotal(b,y); const py=prevSelYear(y); const p=py?pct(t,yearTotal(b,py)):null;
+      h+=`<td><span class="cellv num">${fmtBRL(t)}</span>${py&&t!=null?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+    });
+    h+='</tr>';
+  });
+  h+=`<tr class="total"><td>TOTAL</td>`+selYears.map(y=>{
+    const t=companyYear(y); const py=prevSelYear(y); const p=py?pct(t,companyYear(py)):null;
+    return `<td><span class="cellv num">${fmtBRL(t)}</span>${py?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+  }).join('')+'</tr></tbody>';
+  document.getElementById('tblMatriz').innerHTML=h;
+}
+
+/* ================= RENDER: POR FILIAL ================= */
+function renderFilial(){
+  document.getElementById('ttFilial').textContent='Evolução mensal — '+selBranch;
+  const k=document.getElementById('kpisFilial'); k.innerHTML='';
+  selYears.forEach(y=>{
+    const t=yearTotal(selBranch,y); const py=prevSelYear(y); const p=py?pct(t,yearTotal(selBranch,py)):null;
+    k.insertAdjacentHTML('beforeend',
+      `<div class="kpi" style="--yc:${yColor(y)}">
+        <div class="y">${y}</div>
+        <div class="v num">${fmtBRL(t)}</div>
+        <div class="note">${py&&t!=null? `${pillHTML(p)} <span style="margin-left:4px">vs ${py}</span>` : (t==null?'sem movimento':'primeiro ano selecionado')}</div>
+      </div>`);
+  });
+
+  mkChart('chFilial',{
+    type:'line',
+    data:{labels:MESES,datasets:selYears.map(y=>({
+      label:String(y),data:MESES.map((_,i)=>monthVal(selBranch,String(y),String(i+1))),
+      borderColor:yColor(y),backgroundColor:yColor(y),tension:.3,spanGaps:true,
+      pointRadius:3,pointHoverRadius:5,borderWidth:2.5
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
+      scales:{y:axisMoney,x:{grid:{display:false}}}}
+  });
+
+  let h='<thead><tr><th>Mês</th>'+selYears.map(y=>`<th style="color:${yColor(y)}">${y}</th>`).join('')+'</tr></thead><tbody>';
+  for(let m=1;m<=12;m++){
+    h+=`<tr><td class="br-name">${MESES[m-1]}</td>`;
+    selYears.forEach(y=>{
+      const v=monthVal(selBranch,String(y),String(m));
+      const py=prevSelYear(y); const p=py?pct(v,monthVal(selBranch,String(py),String(m))):null;
+      h+=`<td><span class="cellv num">${fmtBRL2(v)}</span>${py&&v!=null?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+    });
+    h+='</tr>';
+  }
+  h+=`<tr class="total"><td>TOTAL</td>`+selYears.map(y=>{
+    const t=yearTotal(selBranch,y); const py=prevSelYear(y); const p=py?pct(t,yearTotal(selBranch,py)):null;
+    return `<td><span class="cellv num">${fmtBRL(t)}</span>${py&&t!=null?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+  }).join('')+'</tr></tbody>';
+  document.getElementById('tblFilial').innerHTML=h;
+}
+
+/* ================= RENDER: COMPARATIVO MENSAL ================= */
+function renderMes(){
+  document.getElementById('ttMes').textContent='Comparativo do mês — '+MESES[selMonth-1];
+  const brs=allBranches();
+  mkChart('chMes',{
+    type:'bar',
+    data:{labels:brs.map(b=>b.replace(/^\d+\s-\s/,'')),datasets:selYears.map(y=>({
+      label:String(y),data:brs.map(b=>monthVal(b,String(y),String(selMonth))),
+      backgroundColor:yColor(y),borderRadius:4,maxBarThickness:26
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
+      scales:{y:axisMoney,x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:60,minRotation:35,font:{size:11}}}}}
+  });
+
+  let h='<thead><tr><th>Filial</th>'+selYears.map(y=>`<th style="color:${yColor(y)}">${y}</th>`).join('')+'</tr></thead><tbody>';
+  brs.forEach(b=>{
+    h+=`<tr><td class="br-name">${b}</td>`;
+    selYears.forEach(y=>{
+      const v=monthVal(b,String(y),String(selMonth));
+      const py=prevSelYear(y); const p=py?pct(v,monthVal(b,String(py),String(selMonth))):null;
+      h+=`<td><span class="cellv num">${fmtBRL2(v)}</span>${py&&v!=null?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+    });
+    h+='</tr>';
+  });
+  h+=`<tr class="total"><td>TOTAL</td>`+selYears.map(y=>{
+    const t=companyMonth(y,selMonth); const py=prevSelYear(y); const p=py?pct(t,companyMonth(py,selMonth)):null;
+    return `<td><span class="cellv num">${fmtBRL(t)}</span>${py&&t!=null?`<span class="sm">${pillHTML(p)}</span>`:''}</td>`;
+  }).join('')+'</tr></tbody>';
+  document.getElementById('tblMes').innerHTML=h;
+}
+
+/* ================= IMPORTAÇÃO ================= */
+const dz=document.getElementById('dz'), fi=document.getElementById('fileInput'), st=document.getElementById('impStatus');
+let pending=null; // {agg, meta}
+dz.onclick=()=>fi.click();
+dz.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();} };
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
+dz.addEventListener('drop',e=>{ if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+fi.onchange=()=>{ if(fi.files.length) handleFile(fi.files[0]); fi.value=''; };
+
+function parseNum(s){
+  if(typeof s==='number') return s;
+  if(!s) return null;
+  s=String(s).trim().replace(/R\$\s?/,'');
+  if(!s) return null;
+  // Formato BR 1.234,56 ou US 1234.56
+  if(/,\d{1,2}$/.test(s)) s=s.replace(/\./g,'').replace(',','.');
+  else s=s.replace(/,/g,'');
+  const n=parseFloat(s);
+  return isNaN(n)?null:n;
+}
+function parseDate(v){
+  if(v instanceof Date && !isNaN(v)) return v;
+  if(typeof v==='number'){ // serial Excel
+    const d=new Date(Math.round((v-25569)*86400*1000)); return isNaN(d)?null:d;
+  }
+  const m=String(v||'').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if(!m) return null;
+  let y=+m[3]; if(y<100) y+=2000;
+  const d=new Date(y,+m[2]-1,+m[1]);
+  return isNaN(d)?null:d;
+}
+// Recebe matriz [ [Data, f1, f2...], ... ] com header
+function aggregateRows(matrix){
+  // localizar header: linha contendo "data"
+  let hi=-1;
+  for(let i=0;i<Math.min(matrix.length,10);i++){
+    if(matrix[i] && String(matrix[i][0]||'').trim().toLowerCase()==='data'){ hi=i; break; }
+  }
+  if(hi<0) throw new Error('Cabeçalho não encontrado: a primeira coluna deve se chamar "Data".');
+  const header=matrix[hi].map(c=>String(c||'').trim());
+  const branches=header.slice(1).filter(Boolean);
+  if(!branches.length) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
+  const agg={}; let rows=0, dmin=null, dmax=null;
+  for(let i=hi+1;i<matrix.length;i++){
+    const r=matrix[i]; if(!r) continue;
+    const d=parseDate(r[0]); if(!d) continue;
+    rows++;
+    if(!dmin||d<dmin)dmin=d; if(!dmax||d>dmax)dmax=d;
+    const y=String(d.getFullYear()), m=String(d.getMonth()+1);
+    branches.forEach((b,j)=>{
+      const v=parseNum(r[j+1]);
+      if(v && v>0){
+        agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v;
+      }
+    });
+  }
+  if(!rows) throw new Error('Nenhuma linha de dados com data válida foi encontrada.');
+  return {agg,meta:{rows,branches,dmin,dmax}};
+}
+async function handleFile(file){
+  st.innerHTML=''; pending=null;
+  try{
+    const ext=file.name.split('.').pop().toLowerCase();
+    let matrix;
+    if(ext==='pdf'){ matrix=await pdfToMatrix(file); }
+    else{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      matrix=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+    }
+    pending=aggregateRows(matrix);
+    const {meta}=pending;
+    const fdate=d=>d.toLocaleDateString('pt-BR');
+    st.innerHTML=`<div class="imp-box">
+      <h3>Pré-visualização da importação — ${file.name}</h3>
+      <ul>
+        <li><b>${meta.rows}</b> dias de vendas lidos</li>
+        <li>Período: <b>${fdate(meta.dmin)}</b> a <b>${fdate(meta.dmax)}</b></li>
+        <li>Filiais: <b>${meta.branches.length}</b> — ${meta.branches.join(' · ')}</li>
+      </ul>
+      <div class="imp-actions">
+        <button class="btn primary" id="btnMerge">Incorporar dados ao sistema</button>
+      </div>
+      <div class="alert" style="background:var(--chip);color:var(--muted)">Os meses presentes no arquivo substituem os totais existentes do mesmo mês/filial (evita duplicidade em reimportações).</div>
+    </div>`;
+    document.getElementById('btnMerge').onclick=mergePending;
+  }catch(err){
+    st.innerHTML=`<div class="alert err">Não foi possível ler o arquivo: ${err.message}</div>`;
+  }
+}
+async function mergePending(){
+  if(!pending) return;
+  const {agg}=pending;
+  for(const b in agg){ dados[b]??={};
+    for(const y in agg[b]){ dados[b][y]??={};
+      for(const m in agg[b][y]) dados[b][y][m]=Math.round(agg[b][y][m]*100)/100;
+    }
+  }
+  pending=null;
+  st.innerHTML='<div class="alert ok">Dados incorporados. Todos os gráficos e tabelas foram atualizados.</div>';
+  buildFilters(); updateDataInfo(); render();
+  await saveData();
+  if(apiConfigurada() && online)
+    st.innerHTML='<div class="alert ok">Dados incorporados e salvos na planilha do Google — disponíveis em qualquer computador.</div>';
+}
+document.getElementById('btnReset').onclick=async()=>{
+  if(!confirm('Descartar todos os dados importados e voltar aos dados originais?')) return;
+  dados=JSON.parse(JSON.stringify(DADOS_BASE));
+  try{ localStorage.removeItem('miashop_vendas_v1'); }catch(e){}
+  st.innerHTML='<div class="alert ok">Dados originais restaurados.</div>';
+  buildFilters(); updateDataInfo(); render();
+  await saveData();
+};
+
+/* PDF -> matriz de células por posição */
+async function pdfToMatrix(file){
+  if(!window.pdfjsLib) throw new Error('Biblioteca de PDF não carregou (verifique a conexão).');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const matrix=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    // agrupar itens por linha (coordenada Y)
+    const lines={};
+    tc.items.forEach(it=>{
+      const y=Math.round(it.transform[5]/2)*2;
+      (lines[y]??=[]).push({x:it.transform[4],s:it.str});
+    });
+    const ys=Object.keys(lines).map(Number).sort((a,b)=>b-a);
+    ys.forEach(y=>{
+      const items=lines[y].sort((a,b)=>a.x-b.x);
+      // juntar tokens muito próximos (mesma célula)
+      const cells=[]; let cur=null;
+      items.forEach(it=>{
+        if(cur && it.x-cur.xe<6){ cur.s+=it.s; cur.xe=it.x+it.s.length*4; }
+        else { if(cur)cells.push(cur.s.trim()); cur={s:it.s,xe:it.x+it.s.length*4}; }
+      });
+      if(cur)cells.push(cur.s.trim());
+      const row=cells.filter(c=>c!=='');
+      if(row.length>1) matrix.push(row);
+    });
+  }
+  if(!matrix.length) throw new Error('Não foi possível extrair a tabela do PDF (pode ser um PDF escaneado/imagem).');
+  return matrix;
+}
+
+function updateDataInfo(){
+  const ys=allYears(), brs=allBranches();
+  const modo = apiConfigurada()
+    ? (online ? 'salvos na planilha do Google (aba “Dados”, um valor por célula)' : 'modo local — sem conexão com a planilha')
+    : 'modo local — configure a API_URL no arquivo para sincronizar';
+  document.getElementById('dataInfo').innerHTML=
+    `Base atual: <b>${brs.length} filiais</b> · anos <b>${ys[0]}–${ys[ys.length-1]}</b> · ${modo}`;
+}
+
+/* ================= RENDER ROOT ================= */
+function render(){
+  if(!dados) return; // ainda carregando
+  if(curView==='geral') renderGeral();
+  else if(curView==='filial') renderFilial();
+  else if(curView==='mes') renderMes();
+}
+init();
+</script>
+</body>
+</html>
