@@ -548,6 +548,8 @@ function parseDate(v){
   const d=new Date(y,+m[2]-1,+m[1]);
   return isNaN(d)?null:d;
 }
+// Normaliza nome de filial p/ comparação: espaços extras + caixa alta
+function normBr(s){ return String(s||'').replace(/\s+/g,' ').trim().toUpperCase(); }
 // Recebe matriz [ [Data, f1, f2...], ... ] com header
 function aggregateRows(matrix){
   // localizar header: linha contendo "data"
@@ -556,9 +558,21 @@ function aggregateRows(matrix){
     if(matrix[i] && String(matrix[i][0]||'').trim().toLowerCase()==='data'){ hi=i; break; }
   }
   if(hi<0) throw new Error('Cabeçalho não encontrado: a primeira coluna deve se chamar "Data".');
-  const header=matrix[hi].map(c=>String(c||'').trim());
-  const branches=header.slice(1).filter(Boolean);
-  if(!branches.length) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
+  const header=matrix[hi].map(c=>String(c||'').replace(/\s+/g,' ').trim());
+  const rawCols=header.slice(1);
+  if(!rawCols.some(Boolean)) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
+  // canônico: colunas com o mesmo nome (ignorando caixa/espaços) viram UMA filial
+  // e nomes que já existem no sistema reaproveitam a grafia existente
+  const canonExist={}; allBranches().forEach(b=>canonExist[normBr(b)]=b);
+  const canon={}, colBranch=[], dupCount={};
+  rawCols.forEach(c=>{
+    if(!c){ colBranch.push(null); return; }
+    const k=normBr(c);
+    if(!canon[k]) canon[k]=canonExist[k]||c;
+    else dupCount[canon[k]]=(dupCount[canon[k]]||1)+1;
+    colBranch.push(canon[k]);
+  });
+  const branches=[...new Set(colBranch.filter(Boolean))];
   const agg={}; let rows=0, dmin=null, dmax=null;
   for(let i=hi+1;i<matrix.length;i++){
     const r=matrix[i]; if(!r) continue;
@@ -566,15 +580,16 @@ function aggregateRows(matrix){
     rows++;
     if(!dmin||d<dmin)dmin=d; if(!dmax||d>dmax)dmax=d;
     const y=String(d.getFullYear()), m=String(d.getMonth()+1);
-    branches.forEach((b,j)=>{
+    colBranch.forEach((b,j)=>{
+      if(!b) return;
       const v=parseNum(r[j+1]);
       if(v && v>0){
-        agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v;
+        agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v; // colunas duplicadas somam aqui
       }
     });
   }
   if(!rows) throw new Error('Nenhuma linha de dados com data válida foi encontrada.');
-  return {agg,meta:{rows,branches,dmin,dmax}};
+  return {agg,meta:{rows,branches,dmin,dmax,dupCount}};
 }
 async function handleFile(file){
   st.innerHTML=''; pending=null;
@@ -591,12 +606,14 @@ async function handleFile(file){
     pending=aggregateRows(matrix);
     const {meta}=pending;
     const fdate=d=>d.toLocaleDateString('pt-BR');
+    const dups=Object.entries(meta.dupCount||{});
     st.innerHTML=`<div class="imp-box">
       <h3>Pré-visualização da importação — ${file.name}</h3>
       <ul>
         <li><b>${meta.rows}</b> dias de vendas lidos</li>
         <li>Período: <b>${fdate(meta.dmin)}</b> a <b>${fdate(meta.dmax)}</b></li>
         <li>Filiais: <b>${meta.branches.length}</b> — ${meta.branches.join(' · ')}</li>
+        ${dups.length?`<li style="color:var(--pos)">Colunas repetidas somadas: <b>${dups.map(([b,n])=>`${b} (${n} colunas)`).join(' · ')}</b></li>`:''}
       </ul>
       <div class="imp-actions">
         <button class="btn primary" id="btnMerge">Incorporar dados ao sistema</button>
