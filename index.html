@@ -252,10 +252,9 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 /* ================= DADOS BASE (agregados mensais por filial) ================= */
 const DADOS_BASE = {}; // sistema inicia zerado — os dados entram pela aba Importar
 
-/* ================= CONFIGURAÇÃO DO BACKEND (Google Apps Script) =================
-   1. Publique o Code.gs como App da Web (Executar como: você / Acesso: Qualquer pessoa)
-   2. Cole abaixo a URL de implantação (termina com /exec)                          */
-const API_URL = 'COLE_AQUI_A_URL_DO_APPS_SCRIPT';
+/* ============ BACKEND: google.script.run (servido pelo próprio Apps Script) ============
+   Nenhuma configuração necessária: a página é publicada pelo Apps Script e
+   conversa com a planilha por chamadas internas (google.script.run).        */
 
 /* ================= ESTADO ================= */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -269,7 +268,13 @@ let curView = 'geral';
 const charts = {};
 
 /* ================= SINCRONIZAÇÃO ================= */
-const apiConfigurada = () => /^https:\/\/script\.google(usercontent)?\.com\/.+/.test(API_URL);
+const temGS = () => (typeof google!=='undefined' && google.script && google.script.run);
+function gsCall(fn){
+  const args=[].slice.call(arguments,1);
+  return new Promise((res,rej)=>{
+    google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,args);
+  });
+}
 function setBadge(cls,txt){
   const b=document.getElementById('syncBadge');
   b.className='sync '+cls;
@@ -283,41 +288,36 @@ function loadLocal(){
   }catch(e){}
   return {};
 }
-async function apiCarregar(){
-  const r = await fetch(API_URL+'?acao=carregar',{method:'GET'});
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
-}
-async function apiSalvar(){
-  const r = await fetch(API_URL,{method:'POST',body:JSON.stringify({acao:'salvar',dados})});
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  const j = await r.json().catch(()=>({ok:true}));
-  if(j && j.ok===false) throw new Error(j.erro||'erro ao salvar');
-}
 async function saveData(){
   try{ localStorage.setItem('miashop_vendas_v2', JSON.stringify(dados)); }catch(e){}
-  if(!apiConfigurada()) return;
+  if(!temGS()) return;
   setBadge('busy','Salvando na planilha…');
-  try{ await apiSalvar(); online=true; setBadge('ok','Sincronizado com a planilha'); }
+  try{
+    const r = await gsCall('salvarDados', JSON.stringify(dados));
+    if(r && r.ok===false) throw new Error(r.erro||'erro ao salvar');
+    online=true; setBadge('ok','Sincronizado com a planilha');
+  }
   catch(e){ online=false; setBadge('err','Falha ao salvar — dados guardados neste navegador'); }
 }
 async function init(){
-  if(apiConfigurada()){
+  if(temGS()){
     setBadge('busy','Carregando da planilha…');
     try{
-      const remoto = await apiCarregar();
+      const remoto = await gsCall('carregarDados');
       dados = (remoto && typeof remoto==='object') ? remoto : {};
       online = true; setBadge('ok','Sincronizado com a planilha');
+      if(unificarFiliais(dados)) await saveData(); // consolida duplicadas na planilha
     }catch(e){
       online = false; dados = loadLocal();
       setBadge('err','Sem conexão com a planilha — modo local');
     }
   }else{
-    dados = loadLocal();
-    setBadge('warn','Backend não configurado — modo local');
+    dados = loadLocal(); unificarFiliais(dados);
+    setBadge('warn','Aberto fora do Apps Script — modo local');
   }
   buildFilters(); updateDataInfo(); render();
 }
+
 
 /* ================= HELPERS ================= */
 const fmtBRL = v => v==null ? '—' : v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
@@ -550,46 +550,89 @@ function parseDate(v){
 }
 // Normaliza nome de filial p/ comparação: espaços extras + caixa alta
 function normBr(s){ return String(s||'').replace(/\s+/g,' ').trim().toUpperCase(); }
-// Recebe matriz [ [Data, f1, f2...], ... ] com header
+// Filiais são identificadas pelo NÚMERO no início do nome ("16 - ..."):
+// nomes diferentes com o mesmo número são a MESMA filial (valores somam)
+function brNum(s){ const m=String(s||'').trim().match(/^(\d+)\s*[-–]/); return m?m[1]:null; }
+function brKey(s){ const n=brNum(s); return n!==null?('#'+n):normBr(s); }
+function unificarFiliais(d){
+  const grupos={};
+  for(const b in d){ (grupos[brKey(b)]??=[]).push(b); }
+  let unificou=false;
+  for(const k in grupos){
+    const g=grupos[k]; if(g.length<2) continue;
+    unificou=true;
+    // mantém o nome com mais meses de dados (empate: nome mais longo)
+    const conta=b=>{let c=0;for(const y in d[b])c+=Object.keys(d[b][y]).length;return c;};
+    g.sort((a,b)=>conta(b)-conta(a)||b.length-a.length);
+    const alvo=g[0];
+    for(let i=1;i<g.length;i++){
+      const src=g[i];
+      for(const y in d[src]){ d[alvo][y]??={};
+        for(const m in d[src][y]) d[alvo][y][m]=Math.round(((d[alvo][y][m]||0)+d[src][y][m])*100)/100;
+      }
+      delete d[src];
+    }
+  }
+  return unificou;
+}
+/* Recebe a matriz de células e agrega por filial/ano/mês.
+   REGRA: toda duplicidade SOMA —
+   · 2+ colunas com a mesma filial → soma
+   · 2+ linhas com a mesma data → soma
+   · planilha com blocos repetidos (mais de uma coluna "Data",
+     cada uma com suas filiais ao lado) → cada bloco é lido e
+     valores da mesma data+filial são somados                  */
 function aggregateRows(matrix){
-  // localizar header: linha contendo "data"
+  // localizar linha de cabeçalho: primeira que contenha uma célula "Data"
   let hi=-1;
   for(let i=0;i<Math.min(matrix.length,10);i++){
-    if(matrix[i] && String(matrix[i][0]||'').trim().toLowerCase()==='data'){ hi=i; break; }
+    if(matrix[i] && matrix[i].some(c=>normBr(c)==='DATA')){ hi=i; break; }
   }
-  if(hi<0) throw new Error('Cabeçalho não encontrado: a primeira coluna deve se chamar "Data".');
+  if(hi<0) throw new Error('Cabeçalho não encontrado: deve existir uma coluna chamada "Data".');
   const header=matrix[hi].map(c=>String(c||'').replace(/\s+/g,' ').trim());
-  const rawCols=header.slice(1);
-  if(!rawCols.some(Boolean)) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
-  // canônico: colunas com o mesmo nome (ignorando caixa/espaços) viram UMA filial
-  // e nomes que já existem no sistema reaproveitam a grafia existente
-  const canonExist={}; allBranches().forEach(b=>canonExist[normBr(b)]=b);
-  const canon={}, colBranch=[], dupCount={};
-  rawCols.forEach(c=>{
-    if(!c){ colBranch.push(null); return; }
-    const k=normBr(c);
-    if(!canon[k]) canon[k]=canonExist[k]||c;
-    else dupCount[canon[k]]=(dupCount[canon[k]]||1)+1;
-    colBranch.push(canon[k]);
+  // blocos: cada coluna "Data" abre um bloco com as filiais até a próxima "Data"
+  const dataIdx=[]; header.forEach((c,i)=>{ if(normBr(c)==='DATA') dataIdx.push(i); });
+  // canônico: mesma filial (ignorando caixa/espaços) vira UMA só; reaproveita grafia já cadastrada
+  const canonExist={}; allBranches().forEach(b=>canonExist[brKey(b)]=b);
+  const canon={}, dupCount={};
+  const blocks=dataIdx.map((di,bi)=>{
+    const fim=(bi+1<dataIdx.length)?dataIdx[bi+1]:header.length;
+    const cols=[];
+    for(let j=di+1;j<fim;j++){
+      const c=header[j]; if(!c){ cols.push(null); continue; }
+      const k=brKey(c);
+      if(!canon[k]) canon[k]=canonExist[k]||c;
+      else dupCount[canon[k]]=(dupCount[canon[k]]||1)+1;
+      cols.push(canon[k]);
+    }
+    return {di,cols};
   });
-  const branches=[...new Set(colBranch.filter(Boolean))];
-  const agg={}; let rows=0, dmin=null, dmax=null;
+  if(!blocks.some(b=>b.cols.some(Boolean))) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
+  const branches=[...new Set(blocks.flatMap(b=>b.cols).filter(Boolean))];
+  const agg={}; let rows=0, dmin=null, dmax=null, dupDatas=0;
+  const datasVistas=new Set();
   for(let i=hi+1;i<matrix.length;i++){
     const r=matrix[i]; if(!r) continue;
-    const d=parseDate(r[0]); if(!d) continue;
-    rows++;
-    if(!dmin||d<dmin)dmin=d; if(!dmax||d>dmax)dmax=d;
-    const y=String(d.getFullYear()), m=String(d.getMonth()+1);
-    colBranch.forEach((b,j)=>{
-      if(!b) return;
-      const v=parseNum(r[j+1]);
-      if(v && v>0){
-        agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v; // colunas duplicadas somam aqui
-      }
+    let linhaValida=false;
+    blocks.forEach(bl=>{
+      const d=parseDate(r[bl.di]); if(!d) return;
+      linhaValida=true;
+      if(!dmin||d<dmin)dmin=d; if(!dmax||d>dmax)dmax=d;
+      const chave=d.toDateString();
+      if(datasVistas.has(chave)) dupDatas++; else datasVistas.add(chave);
+      const y=String(d.getFullYear()), m=String(d.getMonth()+1);
+      bl.cols.forEach((b,j)=>{
+        if(!b) return;
+        const v=parseNum(r[bl.di+1+j]);
+        if(v && v>0){
+          agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v; // duplicidades somam aqui
+        }
+      });
     });
+    if(linhaValida) rows++;
   }
   if(!rows) throw new Error('Nenhuma linha de dados com data válida foi encontrada.');
-  return {agg,meta:{rows,branches,dmin,dmax,dupCount}};
+  return {agg,meta:{rows,branches,dmin,dmax,dupCount,dupDatas,nBlocos:blocks.length}};
 }
 async function handleFile(file){
   st.innerHTML=''; pending=null;
@@ -614,6 +657,8 @@ async function handleFile(file){
         <li>Período: <b>${fdate(meta.dmin)}</b> a <b>${fdate(meta.dmax)}</b></li>
         <li>Filiais: <b>${meta.branches.length}</b> — ${meta.branches.join(' · ')}</li>
         ${dups.length?`<li style="color:var(--pos)">Colunas repetidas somadas: <b>${dups.map(([b,n])=>`${b} (${n} colunas)`).join(' · ')}</b></li>`:''}
+        ${meta.dupDatas?`<li style="color:var(--pos)">Datas repetidas somadas: <b>${meta.dupDatas}</b> ocorrência(s)</li>`:''}
+        ${meta.nBlocos>1?`<li style="color:var(--pos)">Planilha com <b>${meta.nBlocos}</b> blocos de datas — todos lidos e somados</li>`:''}
       </ul>
       <div class="imp-actions">
         <button class="btn primary" id="btnMerge">Incorporar dados ao sistema</button>
@@ -633,11 +678,11 @@ async function mergePending(){
       for(const m in agg[b][y]) dados[b][y][m]=Math.round(agg[b][y][m]*100)/100;
     }
   }
-  pending=null;
+  pending=null; unificarFiliais(dados);
   st.innerHTML='<div class="alert ok">Dados incorporados. Todos os gráficos e tabelas foram atualizados.</div>';
   buildFilters(); updateDataInfo(); render();
   await saveData();
-  if(apiConfigurada() && online)
+  if(temGS() && online)
     st.innerHTML='<div class="alert ok">Dados incorporados e salvos na planilha do Google — disponíveis em qualquer computador.</div>';
 }
 document.getElementById('btnReset').onclick=async()=>{
@@ -652,7 +697,13 @@ document.getElementById('btnReset').onclick=async()=>{
 /* PDF -> matriz de células por posição */
 async function pdfToMatrix(file){
   if(!window.pdfjsLib) throw new Error('Biblioteca de PDF não carregou (verifique a conexão).');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  if(!pdfjsLib.GlobalWorkerOptions.workerSrc){
+    const wurl='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    try{ // dentro do Apps Script o worker precisa vir como blob (mesma origem)
+      const txt=await (await fetch(wurl)).text();
+      pdfjsLib.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob([txt],{type:'application/javascript'}));
+    }catch(e){ pdfjsLib.GlobalWorkerOptions.workerSrc=wurl; }
+  }
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
   const matrix=[];
@@ -686,13 +737,13 @@ async function pdfToMatrix(file){
 function updateDataInfo(){
   const ys=allYears(), brs=allBranches();
   if(!brs.length){
-    const modo0 = apiConfigurada() ? (online?'conectado à planilha do Google':'sem conexão com a planilha') : 'modo local';
+    const modo0 = temGS() ? (online?'conectado à planilha do Google':'sem conexão com a planilha') : 'modo local';
     document.getElementById('dataInfo').innerHTML = `Base atual: <b>vazia</b> · ${modo0}`;
     return;
   }
-  const modo = apiConfigurada()
+  const modo = temGS()
     ? (online ? 'salvos na planilha do Google (aba “Dados”, um valor por célula)' : 'modo local — sem conexão com a planilha')
-    : 'modo local — configure a API_URL no arquivo para sincronizar';
+    : 'modo local — abra pelo link do App da Web para sincronizar';
   document.getElementById('dataInfo').innerHTML=
     `Base atual: <b>${brs.length} filiais</b> · anos <b>${ys[0]}–${ys[ys.length-1]}</b> · ${modo}`;
 }
