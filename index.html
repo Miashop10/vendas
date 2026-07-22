@@ -149,11 +149,10 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
     <div id="loginForm">
       <label>Usuário</label><input id="inLogin" autocomplete="username">
       <label>Senha</label><input id="inSenha" type="password" autocomplete="current-password">
-      <label id="lbConf" style="display:none">Confirmar senha</label><input id="inConf" type="password" style="display:none">
       <div class="login-err" id="loginErr"></div>
       <div class="login-actions">
         <button class="btn primary" id="btnEntrar">Entrar</button>
-        <button class="btn link" id="btnModoCriar">Criar novo usuário</button>
+        <div style="font-size:12px;color:var(--muted);text-align:center;margin-top:4px">Não tem acesso? Solicite ao administrador do sistema.</div>
       </div>
     </div>
   </div>
@@ -300,8 +299,17 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
   <div class="card">
     <div class="card-hd">
       <div><h2>Usuários e permissões</h2>
-      <div class="sub">Marque quais abas cada usuário pode visualizar. Alterações valem no próximo login do usuário.</div></div>
+      <div class="sub">Somente o master cria usuários e define o que cada um enxerga. Alterações valem no próximo login do usuário.</div></div>
       <button class="btn primary" id="btnRecarregarUsr">Atualizar lista</button>
+    </div>
+    <div class="imp-box" style="margin-bottom:16px">
+      <h3>Criar novo usuário</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div><label class="f-label" style="display:block;margin-bottom:4px">Usuário</label><input id="novoLogin" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 10px;font:600 13px 'Inter'"></div>
+        <div><label class="f-label" style="display:block;margin-bottom:4px">Senha</label><input id="novoSenha" type="text" style="border:1.5px solid var(--line);border-radius:9px;padding:8px 10px;font:600 13px 'Inter'"></div>
+        <button class="btn primary" id="btnCriarUsr">Criar usuário</button>
+      </div>
+      <div style="margin-top:12px"><span class="f-label">Abas visíveis:</span><span id="novoAbas" style="margin-left:8px"></span></div>
     </div>
     <div class="tbl-scroll"><table id="tblUsr"></table></div>
     <div class="imp-status" id="usrStatus"></div>
@@ -332,6 +340,17 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
       <div class="sub">Planilhas já importadas. Excluir uma importação remove do sistema os dias lançados por ela (os totais dos meses são recalculados).</div></div>
     </div>
     <div class="tbl-scroll"><table id="tblHist"></table></div>
+  </div>
+  <div class="card" id="cardFilial" style="display:none">
+    <div class="card-hd">
+      <div><h2>Excluir filial do sistema</h2>
+      <div class="sub">Remove a filial de TODOS os anos e telas — totais mensais, vendas diárias e histórico. Ação exclusiva do master e sem desfazer (para trazer de volta, reimporte os relatórios da filial).</div></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <select id="selExcluirFilial" style="min-width:240px"></select>
+      <button class="btn danger" id="btnExcluirFilial">Excluir filial</button>
+    </div>
+    <div class="imp-status" id="filialStatus"></div>
   </div>
 </section>
 
@@ -699,7 +718,7 @@ function renderDia(){
   tt.textContent=`Acumulado dia a dia — ${MESES[m-1]}`;
   const temComp = yc!=null && yc!==y;
   sub.innerHTML = temComp
-    ? `Comparando <b>${periodo}/${y}</b> com o mesmo período de <b>${yc}</b> · vendas lançadas até o dia <b>${pad(D)}</b>`
+    ? `Comparando <b>${periodo}/${y}</b> com <b>${periodo}/${yc}</b> — os dois anos limitados aos <b>${D}</b> dia(s) já lançados de ${y}. O restante do mês de ${yc} NÃO entra na conta.`
     : `Vendas lançadas até o dia <b>${pad(D)}</b> — importe o mesmo mês de outro ano para comparar`;
   subT.innerHTML=`Acumulado de <b>${periodo}</b> em cada ano. Para corrigir um dia, reimporte o relatório daquele dia: o valor é substituído.`;
 
@@ -713,16 +732,17 @@ function renderDia(){
     <div class="kpi" style="--yc:${dif==null?'#98A6B3':(dif>=0?'#0E7A55':'#B4322E')}"><div class="y">Diferença</div><div class="v num" style="color:${dif==null?'inherit':(dif>=0?'var(--pos)':'var(--neg)')}">${difTxt(dif)}</div><div class="note">${pillHTML(p)} <span style="margin-left:4px">vs ${yc}</span></div></div>`:''));
 
   // gráfico: acumulado dia a dia
-  const nd=Math.max(new Date(y,m,0).getDate(), temComp?new Date(yc,m,0).getDate():0);
+  const nd=Math.min(D, Math.max(new Date(y,m,0).getDate(), temComp?new Date(yc,m,0).getDate():0));
   const labels=[...Array(nd)].map((_,i)=>String(i+1));
   const serie=(ano,lim)=>{ let acc=0,out=[]; for(let d=1;d<=nd;d++){
     if(d>lim){out.push(null);continue;}
     let s=0; for(const b in diario){ const v=diario[b]?.[String(ano)]?.[String(m)]?.[String(d)]; if(v>0)s+=v; }
     acc+=s; out.push(Math.round(acc*100)/100);
   } return out; };
+  const limD=Math.min(D,nd); // MESMO período nos dois anos: até o último dia lançado no ano base
   const dsets=[];
-  if(temComp) dsets.push({label:String(yc),data:serie(yc,new Date(yc,m,0).getDate()),borderColor:yColor(yc),backgroundColor:yColor(yc),tension:.25,pointRadius:0,borderWidth:2,borderDash:[6,4]});
-  dsets.push({label:String(y),data:serie(y,Math.min(D,new Date(y,m,0).getDate())),borderColor:yColor(y),backgroundColor:yColor(y),tension:.25,pointRadius:0,borderWidth:2.5});
+  if(temComp) dsets.push({label:`${yc} (até dia ${pad(limD)})`,data:serie(yc,Math.min(limD,new Date(yc,m,0).getDate())),borderColor:yColor(yc),backgroundColor:yColor(yc),tension:.25,pointRadius:0,borderWidth:2,borderDash:[6,4]});
+  dsets.push({label:`${y} (até dia ${pad(limD)})`,data:serie(y,Math.min(limD,new Date(y,m,0).getDate())),borderColor:yColor(y),backgroundColor:yColor(y),tension:.25,pointRadius:0,borderWidth:2.5});
   mkChart('chDia',{type:'line',data:{labels,datasets:dsets},
     options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
@@ -770,8 +790,10 @@ function parseNum(s){
 }
 function parseDate(v){
   if(v instanceof Date && !isNaN(v)) return v;
-  if(typeof v==='number'){ // serial Excel
-    const d=new Date(Math.round((v-25569)*86400*1000)); return isNaN(d)?null:d;
+  if(typeof v==='number'){ // serial Excel — converte por UTC p/ não deslocar o dia no fuso local
+    const t=new Date(Math.round((v-25569)*86400*1000));
+    if(isNaN(t)) return null;
+    return new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
   }
   const m=String(v||'').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if(!m) return null;
@@ -1019,6 +1041,12 @@ document.getElementById('btnReset').onclick=async()=>{
 
 /* ============ HISTÓRICO DE IMPORTAÇÕES ============ */
 function renderHist(){
+  // seletor de filiais p/ exclusão (todas as que existem no mensal ou no diário)
+  const setF=new Set([...Object.keys(dados||{}), ...Object.keys(diario||{})]);
+  const listaF=[...setF].sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)||a.localeCompare(b));
+  const selF=document.getElementById('selExcluirFilial');
+  const atualSel=selF.value;
+  selF.innerHTML = listaF.length ? listaF.map(f=>`<option ${f===atualSel?'selected':''}>${f}</option>`).join('') : '<option value="">— nenhuma filial —</option>';
   const t=document.getElementById('tblHist');
   if(!importacoes.length){ t.innerHTML='<tbody><tr><td class="mono-muted" style="text-align:left">Nenhuma importação registrada ainda.</td></tr></tbody>'; return; }
   let h='<thead><tr><th>Arquivo</th><th>Importado em</th><th>Usuário</th><th>Período das vendas</th><th>Dias</th><th>Filiais</th><th></th></tr></thead><tbody>';
@@ -1055,6 +1083,25 @@ async function excluirImportacao(id){
   buildFilters(); updateDataInfo(); render();
   await saveData();
 }
+
+/* ============ EXCLUIR FILIAL INTEIRA (master) ============ */
+document.getElementById('btnExcluirFilial').onclick=async()=>{
+  if(!sessao || !sessao.master) return;
+  const stF=document.getElementById('filialStatus'); stF.innerHTML='';
+  const alvo=document.getElementById('selExcluirFilial').value;
+  if(!alvo){ stF.innerHTML='<div class="alert err">Nenhuma filial selecionada.</div>'; return; }
+  if(!confirm(`Excluir a filial "${alvo}" de TODO o sistema?\nSerão removidos os totais mensais, as vendas diárias e as referências no histórico, em todos os anos.\nEsta ação não pode ser desfeita.`)) return;
+  const k=brKey(alvo);
+  // remove do mensal e do diário qualquer grafia da mesma filial (mesmo número)
+  Object.keys(dados).forEach(b=>{ if(brKey(b)===k) delete dados[b]; });
+  Object.keys(diario).forEach(b=>{ if(brKey(b)===k) delete diario[b]; });
+  // limpa as referências no mapa das importações (o registro do histórico permanece)
+  importacoes.forEach(im=>{ if(im.mapa) im.mapa=im.mapa.filter(x=>brKey(x.f)!==k); });
+  if(selBranch && brKey(selBranch)===k) selBranch=null;
+  stF.innerHTML=`<div class="alert ok">Filial "${alvo}" excluída de todo o sistema.</div>`;
+  buildFilters(); updateDataInfo(); render();
+  await saveData();
+};
 
 /* PDF -> matriz de células por posição */
 async function pdfToMatrix(file){
@@ -1119,7 +1166,6 @@ const ABAS = [
   {id:'importar',nome:'Importar dados'}
 ];
 const SENHA_MASTER='YY17';
-let modoCriar=false;
 
 function sessaoSalva(){ try{ const s=localStorage.getItem('miashop_sessao_v1'); return s?JSON.parse(s):null; }catch(e){ return null; } }
 function guardarSessao(s){ try{ if(s) localStorage.setItem('miashop_sessao_v1',JSON.stringify(s)); else localStorage.removeItem('miashop_sessao_v1'); }catch(e){} }
@@ -1140,8 +1186,10 @@ function aplicarPermissoes(){
     }
     document.getElementById('userBox').style.display='';
     document.getElementById('userName').textContent = sessao.master ? (sessao.login||'Master')+' (master)' : sessao.login;
+    document.getElementById('cardFilial').style.display = sessao.master?'':'none';
   }else{
     document.getElementById('userBox').style.display='none';
+    document.getElementById('cardFilial').style.display='none';
   }
   document.getElementById('loginOv').style.display = sessao?'none':'flex';
 }
@@ -1151,20 +1199,6 @@ async function fazerLogin(){
   const senha=document.getElementById('inSenha').value;
   const err=document.getElementById('loginErr'); err.textContent='';
   if(!senha){ err.textContent='Informe a senha.'; return; }
-  if(modoCriar){
-    const conf=document.getElementById('inConf').value;
-    if(!login){ err.textContent='Informe o nome de usuário.'; return; }
-    if(senha!==conf){ err.textContent='As senhas não conferem.'; return; }
-    if(senha===SENHA_MASTER){ err.textContent='Escolha outra senha.'; return; }
-    if(!temBackend()){ err.textContent='Sem conexão com o servidor — não é possível criar usuários agora.'; return; }
-    try{
-      await beApi({acao:'criarUsuario', login, senha});
-      sessao={login, master:false, abas:ABAS.map(a=>a.id)};
-      guardarSessao({login, senha});
-      alternarModoCriar(false); aplicarPermissoes(); render();
-    }catch(e){ err.textContent=e.message||'Não foi possível criar o usuário.'; }
-    return;
-  }
   // master: senha fixa, funciona até sem conexão
   if(senha===SENHA_MASTER){
     sessao={login:login||'Master', master:true, abas:ABAS.map(a=>a.id)};
@@ -1181,21 +1215,11 @@ async function fazerLogin(){
     aplicarPermissoes(); render();
   }catch(e){ err.textContent=e.message||'Usuário ou senha incorretos.'; }
 }
-function alternarModoCriar(v){
-  modoCriar=v;
-  document.getElementById('lbConf').style.display=v?'':'none';
-  document.getElementById('inConf').style.display=v?'':'none';
-  document.getElementById('btnEntrar').textContent=v?'Criar e entrar':'Entrar';
-  document.getElementById('btnModoCriar').textContent=v?'Já tenho usuário — voltar':'Criar novo usuário';
-  document.getElementById('loginErr').textContent='';
-}
 document.getElementById('btnEntrar').onclick=fazerLogin;
-document.getElementById('btnModoCriar').onclick=()=>alternarModoCriar(!modoCriar);
-document.getElementById('inSenha').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!modoCriar) fazerLogin(); });
-document.getElementById('inConf').addEventListener('keydown',e=>{ if(e.key==='Enter') fazerLogin(); });
+document.getElementById('inSenha').addEventListener('keydown',e=>{ if(e.key==='Enter') fazerLogin(); });
 document.getElementById('btnSair').onclick=()=>{
   sessao=null; guardarSessao(null);
-  document.getElementById('inSenha').value=''; document.getElementById('inConf').value='';
+  document.getElementById('inSenha').value='';
   aplicarPermissoes();
 };
 async function restaurarSessao(){
@@ -1220,7 +1244,7 @@ async function renderUsuarios(){
   try{ const r=await beApi({acao:'listarUsuarios', senhaMaster:SENHA_MASTER}); usuarios=r.usuarios||[]; }
   catch(e){ t.innerHTML=`<tbody><tr><td class="mono-muted" style="text-align:left">Erro ao listar: ${e.message}</td></tr></tbody>`; return; }
   let h='<thead><tr><th>Usuário</th><th style="text-align:left">Abas visíveis</th><th></th><th></th></tr></thead><tbody>';
-  if(!usuarios.length) h+='<tr><td class="mono-muted" colspan="4" style="text-align:left">Nenhum usuário criado ainda. Os usuários se cadastram na tela de entrada ("Criar novo usuário").</td></tr>';
+  if(!usuarios.length) h+='<tr><td class="mono-muted" colspan="4" style="text-align:left">Nenhum usuário criado ainda. Use o formulário acima para criar o primeiro.</td></tr>';
   usuarios.forEach(u=>{
     const abas=u.abas||[];
     h+=`<tr data-login="${u.login}"><td class="br-name">${u.login}</td><td style="text-align:left">`+
@@ -1250,6 +1274,26 @@ async function renderUsuarios(){
   });
 }
 document.getElementById('btnRecarregarUsr').onclick=()=>renderUsuarios();
+// checkboxes das abas do novo usuário (todas marcadas por padrão)
+document.getElementById('novoAbas').innerHTML = ABAS.map(a=>
+  `<label class="perm-chk"><input type="checkbox" value="${a.id}" checked>${a.nome}</label>`).join('');
+document.getElementById('btnCriarUsr').onclick=async()=>{
+  if(!sessao || !sessao.master) return;
+  const stU=document.getElementById('usrStatus'); stU.innerHTML='';
+  const login=document.getElementById('novoLogin').value.trim();
+  const senha=document.getElementById('novoSenha').value.trim();
+  const abas=[...document.querySelectorAll('#novoAbas input:checked')].map(i=>i.value);
+  if(!login||!senha){ stU.innerHTML='<div class="alert err">Informe usuário e senha.</div>'; return; }
+  if(senha===SENHA_MASTER){ stU.innerHTML='<div class="alert err">Escolha outra senha para o usuário.</div>'; return; }
+  if(!abas.length){ stU.innerHTML='<div class="alert err">Marque ao menos uma aba visível.</div>'; return; }
+  if(!temBackend()){ stU.innerHTML='<div class="alert err">Sem conexão com o servidor.</div>'; return; }
+  try{
+    await beApi({acao:'criarUsuario', senhaMaster:SENHA_MASTER, login, senha, abas});
+    stU.innerHTML=`<div class="alert ok">Usuário "${login}" criado. Informe a ele o login e a senha.</div>`;
+    document.getElementById('novoLogin').value=''; document.getElementById('novoSenha').value='';
+    renderUsuarios();
+  }catch(e){ stU.innerHTML=`<div class="alert err">Erro: ${e.message}</div>`; }
+};
 
 /* ================= RENDER ROOT ================= */
 function render(){
