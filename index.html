@@ -40,6 +40,25 @@ nav button:focus-visible{outline:2px solid #5FD3B8;outline-offset:-2px}
 .sync.warn .sdot{background:#E8C35A}
 .sync.busy .sdot{background:#5FD3B8;animation:pulse 1s infinite}
 @keyframes pulse{50%{opacity:.3}}
+.userbox{display:flex;align-items:center;gap:8px;font:600 12.5px 'Inter';color:#DFEBE9;background:rgba(255,255,255,.08);border-radius:99px;padding:5px 7px 5px 12px}
+.userbox .uicon{opacity:.8}
+.userbox button{appearance:none;border:0;background:rgba(255,255,255,.14);color:#fff;font:700 11px 'Archivo';border-radius:99px;padding:4px 11px;cursor:pointer}
+.userbox button:hover{background:#C8503F}
+.login-ov{position:fixed;inset:0;background:linear-gradient(160deg,#0C2A31,#10333B 55%,#14424D);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px}
+.login-card{background:#fff;border-radius:18px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.login-card .logo{color:var(--ink);font-size:26px;margin-bottom:2px}
+.login-card .lsub{font-size:13px;color:var(--muted);margin-bottom:20px}
+.login-card label{display:block;font:700 11px 'Inter';letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:12px 0 5px}
+.login-card input{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font:600 14px 'Inter';color:var(--txt)}
+.login-card input:focus{outline:2px solid var(--ink-2)}
+.login-err{color:var(--neg);font-size:12.5px;font-weight:600;margin-top:10px;min-height:16px}
+.login-actions{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.btn.link{background:transparent;color:var(--ink-2);text-decoration:underline;font-weight:600}
+.perm-chk{display:inline-flex;align-items:center;gap:5px;font:600 12px 'Inter';margin-right:12px;white-space:nowrap;cursor:pointer}
+.perm-chk input{accent-color:var(--ink-2);width:15px;height:15px;cursor:pointer}
+.btn.mini{padding:6px 12px;font-size:12px}
+.btn.danger{background:var(--neg-bg);color:var(--neg)}
+.btn.danger:hover{background:#F5CFCB}
 
 /* ===== Filter bar ===== */
 .filters{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:14px 22px;background:var(--card);border-bottom:1px solid var(--line)}
@@ -123,22 +142,45 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
 </head>
 <body>
 
+<div class="login-ov" id="loginOv" style="display:none">
+  <div class="login-card">
+    <div class="logo display" style="font-family:'Archivo';font-weight:800">Miashop<span style="color:#1E9E8E">.</span></div>
+    <div class="lsub">Comparativo de vendas — acesso restrito</div>
+    <div id="loginForm">
+      <label>Usuário</label><input id="inLogin" autocomplete="username">
+      <label>Senha</label><input id="inSenha" type="password" autocomplete="current-password">
+      <label id="lbConf" style="display:none">Confirmar senha</label><input id="inConf" type="password" style="display:none">
+      <div class="login-err" id="loginErr"></div>
+      <div class="login-actions">
+        <button class="btn primary" id="btnEntrar">Entrar</button>
+        <button class="btn link" id="btnModoCriar">Criar novo usuário</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="hd-top">
     <div class="logo">Miashop<span>.</span></div>
     <div class="hd-sub">Comparativo de vendas por filial · evolução ano a ano</div>
+    <div class="userbox" id="userBox" style="display:none">
+      <span class="uicon">&#128100;</span><span id="userName"></span>
+      <button id="btnSair" title="Sair do sistema">Sair</button>
+    </div>
     <div class="sync" id="syncBadge"><span class="sdot"></span><span id="syncTxt">Carregando…</span></div>
   </div>
   <nav id="nav">
     <button data-view="geral" class="on">Visão geral</button>
     <button data-view="filial">Por filial</button>
     <button data-view="mes">Comparativo mensal</button>
+    <button data-view="dia">Comparativo por dia</button>
     <button data-view="importar">Importar dados</button>
+    <button data-view="usuarios" id="navUsuarios" style="display:none">Usuários</button>
   </nav>
 </header>
 
 <div class="filters" id="filterBar">
-  <div class="f-group">
+  <div class="f-group" id="fgAnos">
     <span class="f-label">Anos</span>
     <div class="yr-chips" id="yrChips"></div>
   </div>
@@ -149,6 +191,14 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
   <div class="f-group" id="fgMes" style="display:none">
     <span class="f-label">Mês</span>
     <select id="selMes"></select>
+  </div>
+  <div class="f-group" id="fgDia" style="display:none">
+    <span class="f-label">Mês</span>
+    <select id="selDiaMes"></select>
+    <span class="f-label">Ano</span>
+    <select id="selDiaAno"></select>
+    <span class="f-label">Comparar com</span>
+    <select id="selDiaComp"></select>
   </div>
 </div>
 
@@ -226,6 +276,38 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
   </div>
 </section>
 
+<!-- ============ COMPARATIVO POR DIA ============ -->
+<section class="view" id="view-dia">
+  <div class="grid-kpi" id="kpisDia"></div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2 id="ttDia">Acumulado do mês, dia a dia</h2>
+      <div class="sub" id="subDia"></div></div>
+    </div>
+    <div class="chart-wrap"><canvas id="chDia"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Filiais no mesmo período</h2>
+      <div class="sub" id="subDiaTbl"></div></div>
+    </div>
+    <div class="tbl-scroll"><table id="tblDia"></table></div>
+  </div>
+</section>
+
+<!-- ============ USUÁRIOS (somente master) ============ -->
+<section class="view" id="view-usuarios">
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Usuários e permissões</h2>
+      <div class="sub">Marque quais abas cada usuário pode visualizar. Alterações valem no próximo login do usuário.</div></div>
+      <button class="btn primary" id="btnRecarregarUsr">Atualizar lista</button>
+    </div>
+    <div class="tbl-scroll"><table id="tblUsr"></table></div>
+    <div class="imp-status" id="usrStatus"></div>
+  </div>
+</section>
+
 <!-- ============ IMPORTAR ============ -->
 <section class="view" id="view-importar">
   <div class="card">
@@ -244,6 +326,13 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#F4F8F7}
       <button class="btn ghost" id="btnReset">Zerar todos os dados</button>
     </div>
   </div>
+  <div class="card">
+    <div class="card-hd">
+      <div><h2>Histórico de importações</h2>
+      <div class="sub">Planilhas já importadas. Excluir uma importação remove do sistema os dias lançados por ela (os totais dos meses são recalculados).</div></div>
+    </div>
+    <div class="tbl-scroll"><table id="tblHist"></table></div>
+  </div>
 </section>
 
 </main>
@@ -261,11 +350,15 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyTpeJV1XgnjyOb-prxP2u9
 /* ================= ESTADO ================= */
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const YEAR_COLORS = ['#98A6B3','#D98E2B','#1E9E8E','#2F55D4','#8A4FBF','#C24573','#5B7F2E','#B4632B'];
-let dados = null;         // carregado no init()
+let dados = null;         // totais mensais {filial:{ano:{mes:valor}}}
+let diario = null;        // vendas por dia {filial:{ano:{mes:{dia:valor}}}}
+let importacoes = [];     // histórico de planilhas importadas
+let sessao = null;        // {login, master, abas:[]}
 let online = false;       // conectado ao Apps Script?
 let selYears = [];        // anos selecionados
 let selBranch = null;     // filial selecionada
 let selMonth = new Date().getMonth()+1;
+let selDiaMes=null, selDiaAno=null, selDiaComp=null; // comparativo por dia
 let curView = 'geral';
 const charts = {};
 
@@ -288,16 +381,20 @@ async function beCarregar(){
   const r=await fetch(apiUrl()+'?acao=carregar'); if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
-async function beSalvar(){
+async function beApi(payload){
   if(temGS()){
-    const r=await gsCall('salvarDados', JSON.stringify(dados));
-    if(r && r.ok===false) throw new Error(r.erro||'erro ao salvar');
-    return;
+    const r = await gsCall('apiPost', JSON.stringify(payload));
+    if(r && r.ok===false) throw new Error(r.erro||'erro no servidor');
+    return r;
   }
-  const r=await fetch(apiUrl(),{method:'POST',body:JSON.stringify({acao:'salvar',dados})});
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  const j=await r.json().catch(()=>({ok:true}));
-  if(j && j.ok===false) throw new Error(j.erro||'erro ao salvar');
+  const rr=await fetch(apiUrl(),{method:'POST',body:JSON.stringify(payload)});
+  if(!rr.ok) throw new Error('HTTP '+rr.status);
+  const j=await rr.json().catch(()=>({ok:true}));
+  if(j && j.ok===false) throw new Error(j.erro||'erro no servidor');
+  return j;
+}
+async function beSalvar(){
+  await beApi({acao:'salvar', mensal:dados, diario, importacoes});
 }
 function configurarUrl(){
   const atual=apiUrl()||'';
@@ -314,15 +411,16 @@ function setBadge(cls,txt){
   document.getElementById('syncTxt').textContent=txt;
 }
 function loadLocal(){
-  try{ localStorage.removeItem('miashop_vendas_v1'); }catch(e){} // limpa cache de versões antigas
+  try{ localStorage.removeItem('miashop_vendas_v1'); localStorage.removeItem('miashop_vendas_v2'); }catch(e){}
   try{
-    const s = localStorage.getItem('miashop_vendas_v2');
-    if(s){ const o = JSON.parse(s); if(o && typeof o==='object' && Object.keys(o).length) return o; }
+    const s = localStorage.getItem('miashop_vendas_v3');
+    if(s){ const o = JSON.parse(s); if(o && typeof o==='object') return {mensal:o.mensal||{}, diario:o.diario||{}, importacoes:o.importacoes||[]}; }
   }catch(e){}
-  return {};
+  return {mensal:{}, diario:{}, importacoes:[]};
 }
+function aplicarLocal(l){ dados=l.mensal; diario=l.diario; importacoes=l.importacoes||[]; }
 async function saveData(){
-  try{ localStorage.setItem('miashop_vendas_v2', JSON.stringify(dados)); }catch(e){}
+  try{ localStorage.setItem('miashop_vendas_v3', JSON.stringify({mensal:dados, diario, importacoes})); }catch(e){}
   if(!temBackend()) return;
   setBadge('busy','Salvando na planilha…');
   try{ await beSalvar(); online=true; setBadge('ok','Sincronizado com a planilha'); }
@@ -333,19 +431,27 @@ async function init(){
     setBadge('busy','Carregando da planilha…');
     try{
       const remoto = await beCarregar();
-      dados = (remoto && typeof remoto==='object') ? remoto : {};
+      if(remoto && typeof remoto==='object'){
+        dados  = remoto.mensal || (remoto.diario===undefined ? remoto : {}); // compat versão antiga
+        diario = remoto.diario || {};
+        importacoes = remoto.importacoes || [];
+      }else{ dados={}; diario={}; importacoes=[]; }
       online = true; setBadge('ok','Sincronizado com a planilha');
-      if(unificarFiliais(dados)) await saveData(); // consolida duplicadas na planilha
+      const u1=unificarFiliais(dados), u2=unificarDiario(diario), u3=harmonizarNomes(), u4=sincronizarMensal();
+      if(u1||u2||u3||u4) await saveData(); // consolida na planilha
     }catch(e){
-      online = false; dados = loadLocal(); unificarFiliais(dados);
+      online = false; aplicarLocal(loadLocal());
+      unificarFiliais(dados); unificarDiario(diario); harmonizarNomes(); sincronizarMensal();
       setBadge('err','Sem conexão com a planilha — modo local (clique para configurar)');
     }
   }else{
-    dados = loadLocal(); unificarFiliais(dados);
+    aplicarLocal(loadLocal());
+    unificarFiliais(dados); unificarDiario(diario); harmonizarNomes(); sincronizarMensal();
     setBadge('warn','Backend não configurado — clique aqui para conectar');
   }
   document.getElementById('syncBadge').onclick=()=>{ if(!temGS() && !online) configurarUrl(); };
   buildFilters(); updateDataInfo(); render();
+  await restaurarSessao();
 }
 
 
@@ -391,7 +497,28 @@ function buildFilters(){
   sf.innerHTML = brs.map(b=>`<option ${b===selBranch?'selected':''}>${b}</option>`).join('');
   const sm=document.getElementById('selMes');
   sm.innerHTML = MESES.map((m,i)=>`<option value="${i+1}" ${i+1===selMonth?'selected':''}>${m}</option>`).join('');
+  // comparativo por dia
+  const anosD = anosDiario();
+  if(anosD.length){
+    if(selDiaAno==null || !anosD.includes(selDiaAno)) selDiaAno = anosD[anosD.length-1];
+    const mesesD = mesesDiario(selDiaAno);
+    if(selDiaMes==null || !mesesD.includes(selDiaMes)) selDiaMes = mesesD.length?mesesD[mesesD.length-1]:(new Date().getMonth()+1);
+    const anteriores = anosD.filter(y=>y<selDiaAno);
+    const candidatos = anosD.filter(y=>y!==selDiaAno);
+    if(selDiaComp==null || selDiaComp===selDiaAno || !anosD.includes(selDiaComp))
+      selDiaComp = anteriores.length?anteriores[anteriores.length-1]:(candidatos[0]??null);
+    document.getElementById('selDiaAno').innerHTML = anosD.map(y=>`<option ${y===selDiaAno?'selected':''}>${y}</option>`).join('');
+    document.getElementById('selDiaMes').innerHTML = MESES.map((m,i)=>`<option value="${i+1}" ${i+1===selDiaMes?'selected':''}>${m}</option>`).join('');
+    document.getElementById('selDiaComp').innerHTML = candidatos.length
+      ? candidatos.map(y=>`<option ${y===selDiaComp?'selected':''}>${y}</option>`).join('')
+      : '<option value="">—</option>';
+  }else{
+    ['selDiaAno','selDiaMes','selDiaComp'].forEach(id=>document.getElementById(id).innerHTML='<option value="">—</option>');
+  }
 }
+document.getElementById('selDiaAno').onchange=e=>{selDiaAno=+e.target.value||null;selDiaComp=null;buildFilters();render();};
+document.getElementById('selDiaMes').onchange=e=>{selDiaMes=+e.target.value||null;render();};
+document.getElementById('selDiaComp').onchange=e=>{selDiaComp=+e.target.value||null;render();};
 document.getElementById('selFilial').onchange=e=>{selBranch=e.target.value;render();};
 document.getElementById('selMes').onchange=e=>{selMonth=+e.target.value;render();};
 
@@ -403,6 +530,9 @@ document.getElementById('nav').addEventListener('click',e=>{
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='view-'+curView));
   document.getElementById('fgFilial').style.display = curView==='filial'?'':'none';
   document.getElementById('fgMes').style.display = curView==='mes'?'':'none';
+  document.getElementById('fgDia').style.display = curView==='dia'?'':'none';
+  document.getElementById('fgAnos').style.display = (curView==='dia'||curView==='usuarios')?'none':'';
+  if(dados) buildFilters();
   render();
 });
 
@@ -546,6 +676,77 @@ function renderMes(){
   document.getElementById('tblMes').innerHTML=h;
 }
 
+/* ================= RENDER: COMPARATIVO POR DIA ================= */
+function renderDia(){
+  const k=document.getElementById('kpisDia'); k.innerHTML='';
+  const sub=document.getElementById('subDia'), subT=document.getElementById('subDiaTbl');
+  const tt=document.getElementById('ttDia');
+  const anosD=anosDiario();
+  const y=selDiaAno, m=selDiaMes, yc=selDiaComp;
+  const D = (anosD.length && y && m) ? ultimoDiaLancado(y,m) : 0;
+  const pad=n=>String(n).padStart(2,'0');
+  if(!anosD.length || !D){
+    tt.textContent='Acumulado do mês, dia a dia';
+    sub.innerHTML = !anosD.length
+      ? 'Nenhuma venda diária cadastrada. Importe os relatórios por dia na aba <b>Importar dados</b> — inclusive os do ano passado, que servem de base de comparação.'
+      : 'Sem vendas lançadas no mês/ano selecionado.';
+    subT.textContent='';
+    mkChart('chDia',{type:'line',data:{labels:[],datasets:[]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+    document.getElementById('tblDia').innerHTML='';
+    return;
+  }
+  const periodo=`01 a ${pad(D)}/${pad(m)}`;
+  tt.textContent=`Acumulado dia a dia — ${MESES[m-1]}`;
+  const temComp = yc!=null && yc!==y;
+  sub.innerHTML = temComp
+    ? `Comparando <b>${periodo}/${y}</b> com o mesmo período de <b>${yc}</b> · vendas lançadas até o dia <b>${pad(D)}</b>`
+    : `Vendas lançadas até o dia <b>${pad(D)}</b> — importe o mesmo mês de outro ano para comparar`;
+  subT.innerHTML=`Acumulado de <b>${periodo}</b> em cada ano. Para corrigir um dia, reimporte o relatório daquele dia: o valor é substituído.`;
+
+  const atual=acumTotal(y,m,D), ant=temComp?acumTotal(yc,m,D):null;
+  const dif=(atual!=null&&ant!=null)?Math.round((atual-ant)*100)/100:null;
+  const p=pct(atual,ant);
+  const difTxt=v=>v==null?'—':(v>=0?'+ ':'− ')+fmtBRL2(Math.abs(v));
+  k.insertAdjacentHTML('beforeend',
+    `<div class="kpi" style="--yc:${yColor(y)}"><div class="y">${periodo}/${y}</div><div class="v num">${fmtBRL2(atual)}</div><div class="note">todas as filiais somadas</div></div>`+
+    (temComp?`<div class="kpi" style="--yc:${yColor(yc)}"><div class="y">${periodo}/${yc}</div><div class="v num">${fmtBRL2(ant)}</div><div class="note">mesmo período do ano comparado</div></div>
+    <div class="kpi" style="--yc:${dif==null?'#98A6B3':(dif>=0?'#0E7A55':'#B4322E')}"><div class="y">Diferença</div><div class="v num" style="color:${dif==null?'inherit':(dif>=0?'var(--pos)':'var(--neg)')}">${difTxt(dif)}</div><div class="note">${pillHTML(p)} <span style="margin-left:4px">vs ${yc}</span></div></div>`:''));
+
+  // gráfico: acumulado dia a dia
+  const nd=Math.max(new Date(y,m,0).getDate(), temComp?new Date(yc,m,0).getDate():0);
+  const labels=[...Array(nd)].map((_,i)=>String(i+1));
+  const serie=(ano,lim)=>{ let acc=0,out=[]; for(let d=1;d<=nd;d++){
+    if(d>lim){out.push(null);continue;}
+    let s=0; for(const b in diario){ const v=diario[b]?.[String(ano)]?.[String(m)]?.[String(d)]; if(v>0)s+=v; }
+    acc+=s; out.push(Math.round(acc*100)/100);
+  } return out; };
+  const dsets=[];
+  if(temComp) dsets.push({label:String(yc),data:serie(yc,new Date(yc,m,0).getDate()),borderColor:yColor(yc),backgroundColor:yColor(yc),tension:.25,pointRadius:0,borderWidth:2,borderDash:[6,4]});
+  dsets.push({label:String(y),data:serie(y,Math.min(D,new Date(y,m,0).getDate())),borderColor:yColor(y),backgroundColor:yColor(y),tension:.25,pointRadius:0,borderWidth:2.5});
+  mkChart('chDia',{type:'line',data:{labels,datasets:dsets},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{tooltip:tipMoney,legend:{labels:{usePointStyle:true,boxHeight:7}}},
+      scales:{y:axisMoney,x:{grid:{display:false},title:{display:true,text:'dia do mês',font:{size:11}}}}}});
+
+  // tabela por filial
+  const brs=new Set();
+  for(const b in diario){ if(acumFilial(b,y,m,D)!=null || (temComp && acumFilial(b,yc,m,D)!=null)) brs.add(b); }
+  const lista=[...brs].sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)||a.localeCompare(b));
+  let h=`<thead><tr><th>Filial</th><th style="color:${yColor(y)}">${periodo}/${y}</th>`+
+    (temComp?`<th style="color:${yColor(yc)}">${periodo}/${yc}</th><th>Diferença</th><th>Variação</th>`:'')+'</tr></thead><tbody>';
+  lista.forEach(b=>{
+    const a1=acumFilial(b,y,m,D), a0=temComp?acumFilial(b,yc,m,D):null;
+    const d2=(a1!=null&&a0!=null)?Math.round((a1-a0)*100)/100:null;
+    h+=`<tr><td class="br-name">${b}</td><td><span class="cellv num">${fmtBRL2(a1)}</span></td>`+
+      (temComp?`<td><span class="cellv num">${fmtBRL2(a0)}</span></td>
+      <td class="num" style="font-weight:700;color:${d2==null?'var(--muted)':(d2>=0?'var(--pos)':'var(--neg)')}">${difTxt(d2)}</td>
+      <td>${pillHTML(pct(a1,a0))}</td>`:'')+'</tr>';
+  });
+  h+=`<tr class="total"><td>TOTAL</td><td class="num">${fmtBRL2(atual)}</td>`+
+    (temComp?`<td class="num">${fmtBRL2(ant)}</td><td class="num" style="color:${dif==null?'inherit':(dif>=0?'var(--pos)':'var(--neg)')}">${difTxt(dif)}</td><td>${pillHTML(p)}</td>`:'')+'</tr></tbody>';
+  document.getElementById('tblDia').innerHTML=h;
+}
+
 /* ================= IMPORTAÇÃO ================= */
 const dz=document.getElementById('dz'), fi=document.getElementById('fileInput'), st=document.getElementById('impStatus');
 let pending=null; // {agg, meta}
@@ -605,6 +806,75 @@ function unificarFiliais(d){
   }
   return unificou;
 }
+
+// mesma unificação para o armazenamento diário {filial:{ano:{mes:{dia:valor}}}}
+function unificarDiario(d){
+  const grupos={};
+  for(const b in d){ (grupos[brKey(b)]??=[]).push(b); }
+  let unificou=false;
+  for(const k in grupos){
+    const g=grupos[k]; if(g.length<2) continue;
+    unificou=true;
+    const conta=b=>{let c=0;for(const y in d[b])for(const m in d[b][y])c+=Object.keys(d[b][y][m]).length;return c;};
+    g.sort((a,b)=>conta(b)-conta(a)||b.length-a.length);
+    const alvo=g[0];
+    for(let i=1;i<g.length;i++){
+      const src=g[i];
+      for(const y in d[src]){ d[alvo][y]??={};
+        for(const m in d[src][y]){ d[alvo][y][m]??={};
+          for(const dia in d[src][y][m])
+            d[alvo][y][m][dia]=Math.round(((d[alvo][y][m][dia]||0)+d[src][y][m][dia])*100)/100;
+        }
+      }
+      delete d[src];
+    }
+  }
+  return unificou;
+}
+// diário adota a grafia usada no mensal (mesma filial = mesmo número)
+function harmonizarNomes(){
+  const mapa={}; for(const b in dados) mapa[brKey(b)]=b;
+  let mudou=false;
+  for(const b of Object.keys(diario)){
+    const alvo=mapa[brKey(b)];
+    if(alvo && alvo!==b){
+      diario[alvo]=diario[alvo]||{};
+      for(const y in diario[b]){ diario[alvo][y]??={};
+        for(const m in diario[b][y]){ diario[alvo][y][m]??={};
+          for(const dia in diario[b][y][m])
+            diario[alvo][y][m][dia]=Math.round(((diario[alvo][y][m][dia]||0)+diario[b][y][m][dia])*100)/100;
+        }
+      }
+      delete diario[b]; mudou=true;
+    }
+  }
+  return mudou;
+}
+// meses com lançamentos diários: total do mês = soma dos dias
+function sincronizarMensal(){
+  let mudou=false;
+  for(const b in diario) for(const y in diario[b]) for(const m in diario[b][y]){
+    const dias=diario[b][y][m]; let t=0;
+    for(const dia in dias) t+=(dias[dia]||0);
+    t=Math.round(t*100)/100;
+    if(t>0){
+      dados[b]??={}; dados[b][y]??={};
+      if(dados[b][y][m]!==t){ dados[b][y][m]=t; mudou=true; }
+    }else if(dados[b]?.[y]?.[m]!==undefined && Object.keys(dias).length===0){
+      // mês ficou sem nenhum dia (importação excluída): remove o total
+      delete dados[b][y][m]; mudou=true;
+    }
+  }
+  return mudou;
+}
+
+/* ============ COMPARATIVO POR DIA: helpers ============ */
+function anosDiario(){ const s=new Set(); for(const b in diario) for(const y in diario[b]) for(const m in diario[b][y]) if(Object.keys(diario[b][y][m]).length){ s.add(+y); break; } return [...s].sort(); }
+function mesesDiario(y){ const s=new Set(); for(const b in diario){ const a=diario[b][String(y)]; if(a) for(const m in a) if(Object.keys(a[m]).length) s.add(+m); } return [...s].sort((a,b)=>a-b); }
+function ultimoDiaLancado(y,m){ let d=0; for(const b in diario){ const mm=diario[b]?.[String(y)]?.[String(m)]; if(mm) for(const k in mm) if(mm[k]>0) d=Math.max(d,+k); } return d; }
+function acumFilial(b,y,m,D){ const mm=diario[b]?.[String(y)]?.[String(m)]; if(!mm) return null; let t=0,has=false; for(const k in mm){ if(+k<=D && mm[k]>0){t+=mm[k];has=true;} } return has?Math.round(t*100)/100:null; }
+function acumTotal(y,m,D){ let t=0,has=false; for(const b in diario){ const v=acumFilial(b,y,m,D); if(v!=null){t+=v;has=true;} } return has?Math.round(t*100)/100:null; }
+
 /* Recebe a matriz de células e agrega por filial/ano/mês.
    REGRA: toda duplicidade SOMA —
    · 2+ colunas com a mesma filial → soma
@@ -639,7 +909,7 @@ function aggregateRows(matrix){
   });
   if(!blocks.some(b=>b.cols.some(Boolean))) throw new Error('Nenhuma coluna de filial encontrada no cabeçalho.');
   const branches=[...new Set(blocks.flatMap(b=>b.cols).filter(Boolean))];
-  const agg={}; let rows=0, dmin=null, dmax=null, dupDatas=0;
+  const agg={}, aggDia={}; let rows=0, dmin=null, dmax=null, dupDatas=0;
   const datasVistas=new Set();
   for(let i=hi+1;i<matrix.length;i++){
     const r=matrix[i]; if(!r) continue;
@@ -651,18 +921,21 @@ function aggregateRows(matrix){
       const chave=d.toDateString();
       if(datasVistas.has(chave)) dupDatas++; else datasVistas.add(chave);
       const y=String(d.getFullYear()), m=String(d.getMonth()+1);
+      const diaN=String(d.getDate());
       bl.cols.forEach((b,j)=>{
         if(!b) return;
         const v=parseNum(r[bl.di+1+j]);
         if(v && v>0){
           agg[b]??={}; agg[b][y]??={}; agg[b][y][m]=(agg[b][y][m]||0)+v; // duplicidades somam aqui
+          aggDia[b]??={}; aggDia[b][y]??={}; aggDia[b][y][m]??={};
+          aggDia[b][y][m][diaN]=(aggDia[b][y][m][diaN]||0)+v;            // detalhe por dia
         }
       });
     });
     if(linhaValida) rows++;
   }
   if(!rows) throw new Error('Nenhuma linha de dados com data válida foi encontrada.');
-  return {agg,meta:{rows,branches,dmin,dmax,dupCount,dupDatas,nBlocos:blocks.length}};
+  return {agg,aggDia,meta:{rows,branches,dmin,dmax,dupCount,dupDatas,nBlocos:blocks.length}};
 }
 async function handleFile(file){
   st.innerHTML=''; pending=null;
@@ -676,7 +949,7 @@ async function handleFile(file){
       const ws=wb.Sheets[wb.SheetNames[0]];
       matrix=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
     }
-    pending=aggregateRows(matrix);
+    pending=aggregateRows(matrix); pending.arquivo=file.name;
     const {meta}=pending;
     const fdate=d=>d.toLocaleDateString('pt-BR');
     const dups=Object.entries(meta.dupCount||{});
@@ -693,7 +966,7 @@ async function handleFile(file){
       <div class="imp-actions">
         <button class="btn primary" id="btnMerge">Incorporar dados ao sistema</button>
       </div>
-      <div class="alert" style="background:var(--chip);color:var(--muted)">Os meses presentes no arquivo substituem os totais existentes do mesmo mês/filial (evita duplicidade em reimportações).</div>
+      <div class="alert" style="background:var(--chip);color:var(--muted)">As vendas são guardadas por dia: cada dia presente no arquivo substitui o valor daquele mesmo dia/filial (pode reimportar para corrigir, sem duplicar). O total do mês é recalculado somando os dias.</div>
     </div>`;
     document.getElementById('btnMerge').onclick=mergePending;
   }catch(err){
@@ -702,13 +975,33 @@ async function handleFile(file){
 }
 async function mergePending(){
   if(!pending) return;
-  const {agg}=pending;
-  for(const b in agg){ dados[b]??={};
-    for(const y in agg[b]){ dados[b][y]??={};
-      for(const m in agg[b][y]) dados[b][y][m]=Math.round(agg[b][y][m]*100)/100;
+  const {aggDia,meta,arquivo}=pending;
+  // cada dia do arquivo SUBSTITUI o mesmo dia/filial no sistema (reimportar corrige sem duplicar)
+  for(const b in aggDia){ diario[b]??={};
+    for(const y in aggDia[b]){ diario[b][y]??={};
+      for(const m in aggDia[b][y]){ diario[b][y][m]??={};
+        for(const dd in aggDia[b][y][m])
+          diario[b][y][m][dd]=Math.round(aggDia[b][y][m][dd]*100)/100;
+      }
     }
   }
-  pending=null; unificarFiliais(dados);
+  unificarDiario(diario); harmonizarNomes(); sincronizarMensal(); unificarFiliais(dados);
+  // registro no histórico (mapa de dias p/ permitir exclusão)
+  const mapa=[];
+  for(const b in aggDia) for(const y in aggDia[b]) for(const m in aggDia[b][y])
+    mapa.push({f:b,a:+y,m:+m,ds:Object.keys(aggDia[b][y][m]).map(Number).sort((x,z)=>x-z)});
+  const fdate=d=>d.toLocaleDateString('pt-BR');
+  importacoes.push({
+    id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    arquivo: arquivo||'arquivo',
+    dataHora: new Date().toLocaleString('pt-BR'),
+    usuario: sessao?sessao.login:'—',
+    periodo: fdate(meta.dmin)+' a '+fdate(meta.dmax),
+    dias: meta.rows,
+    filiais: meta.branches.length,
+    mapa
+  });
+  pending=null;
   st.innerHTML='<div class="alert ok">Dados incorporados. Todos os gráficos e tabelas foram atualizados.</div>';
   buildFilters(); updateDataInfo(); render();
   await saveData();
@@ -717,12 +1010,51 @@ async function mergePending(){
 }
 document.getElementById('btnReset').onclick=async()=>{
   if(!confirm('Apagar TODOS os dados do sistema (inclusive na planilha do Google)? Esta ação não pode ser desfeita.')) return;
-  dados={};
-  try{ localStorage.removeItem('miashop_vendas_v2'); }catch(e){}
+  dados={}; diario={}; importacoes=[];
+  try{ localStorage.removeItem('miashop_vendas_v3'); }catch(e){}
   st.innerHTML='<div class="alert ok">Sistema zerado. Use a importação acima para carregar novos dados.</div>';
   buildFilters(); updateDataInfo(); render();
   await saveData();
 };
+
+/* ============ HISTÓRICO DE IMPORTAÇÕES ============ */
+function renderHist(){
+  const t=document.getElementById('tblHist');
+  if(!importacoes.length){ t.innerHTML='<tbody><tr><td class="mono-muted" style="text-align:left">Nenhuma importação registrada ainda.</td></tr></tbody>'; return; }
+  let h='<thead><tr><th>Arquivo</th><th>Importado em</th><th>Usuário</th><th>Período das vendas</th><th>Dias</th><th>Filiais</th><th></th></tr></thead><tbody>';
+  [...importacoes].reverse().forEach(im=>{
+    h+=`<tr><td class="br-name">${im.arquivo}</td><td class="mono-muted">${im.dataHora}</td><td class="mono-muted">${im.usuario||'—'}</td>
+      <td class="mono-muted">${im.periodo}</td><td class="num">${im.dias}</td><td class="num">${im.filiais}</td>
+      <td><button class="btn mini danger" data-del="${im.id}">Excluir</button></td></tr>`;
+  });
+  h+='</tbody>';
+  t.innerHTML=h;
+  t.querySelectorAll('button[data-del]').forEach(b=>b.onclick=()=>excluirImportacao(b.dataset.del));
+}
+async function excluirImportacao(id){
+  const im=importacoes.find(x=>x.id===id); if(!im) return;
+  if(!confirm(`Excluir a importação "${im.arquivo}" (${im.periodo})?\nOs dias lançados por ela serão removidos do sistema e os totais dos meses recalculados.`)) return;
+  const mapaKey={}; for(const b in diario) mapaKey[brKey(b)]=b; // nomes podem ter sido unificados
+  (im.mapa||[]).forEach(x=>{
+    const b=mapaKey[brKey(x.f)]||x.f;
+    const mm=diario[b]?.[String(x.a)]?.[String(x.m)]; if(!mm) return;
+    (x.ds||[]).forEach(d=>{ delete mm[String(d)]; });
+    if(!Object.keys(mm).length){
+      // sem dias restantes no mês: remove o mês (o total mensal sai em sincronizarMensal)
+      if(dados[b]?.[String(x.a)]?.[String(x.m)]!==undefined) delete dados[b][String(x.a)][String(x.m)];
+      delete diario[b][String(x.a)][String(x.m)];
+      if(!Object.keys(diario[b][String(x.a)]).length) delete diario[b][String(x.a)];
+      if(!Object.keys(diario[b]).length) delete diario[b];
+      if(dados[b] && dados[b][String(x.a)] && !Object.keys(dados[b][String(x.a)]).length) delete dados[b][String(x.a)];
+      if(dados[b] && !Object.keys(dados[b]).length) delete dados[b];
+    }
+  });
+  sincronizarMensal();
+  importacoes=importacoes.filter(x=>x.id!==id);
+  st.innerHTML='<div class="alert ok">Importação excluída. Dias removidos e totais recalculados.</div>';
+  buildFilters(); updateDataInfo(); render();
+  await saveData();
+}
 
 /* PDF -> matriz de células por posição */
 async function pdfToMatrix(file){
@@ -778,6 +1110,147 @@ function updateDataInfo(){
     `Base atual: <b>${brs.length} filiais</b> · anos <b>${ys[0]}–${ys[ys.length-1]}</b> · ${modo}`;
 }
 
+/* ============ LOGIN, SESSÃO E PERMISSÕES ============ */
+const ABAS = [
+  {id:'geral',   nome:'Visão geral'},
+  {id:'filial',  nome:'Por filial'},
+  {id:'mes',     nome:'Comparativo mensal'},
+  {id:'dia',     nome:'Comparativo por dia'},
+  {id:'importar',nome:'Importar dados'}
+];
+const SENHA_MASTER='YY17';
+let modoCriar=false;
+
+function sessaoSalva(){ try{ const s=localStorage.getItem('miashop_sessao_v1'); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function guardarSessao(s){ try{ if(s) localStorage.setItem('miashop_sessao_v1',JSON.stringify(s)); else localStorage.removeItem('miashop_sessao_v1'); }catch(e){} }
+
+function aplicarPermissoes(){
+  const abas = sessao ? (sessao.master ? ABAS.map(a=>a.id) : (sessao.abas||[])) : [];
+  document.querySelectorAll('#nav button').forEach(b=>{
+    const v=b.dataset.view;
+    if(v==='usuarios'){ b.style.display = (sessao&&sessao.master)?'':'none'; return; }
+    b.style.display = abas.includes(v)?'':'none';
+  });
+  if(sessao){
+    const permitidas = (sessao.master?ABAS.map(a=>a.id).concat('usuarios'):abas);
+    if(!permitidas.includes(curView)){
+      const alvo = permitidas[0]||'geral';
+      const btn=document.querySelector(`#nav button[data-view="${alvo}"]`);
+      if(btn) btn.click();
+    }
+    document.getElementById('userBox').style.display='';
+    document.getElementById('userName').textContent = sessao.master ? (sessao.login||'Master')+' (master)' : sessao.login;
+  }else{
+    document.getElementById('userBox').style.display='none';
+  }
+  document.getElementById('loginOv').style.display = sessao?'none':'flex';
+}
+
+async function fazerLogin(){
+  const login=document.getElementById('inLogin').value.trim();
+  const senha=document.getElementById('inSenha').value;
+  const err=document.getElementById('loginErr'); err.textContent='';
+  if(!senha){ err.textContent='Informe a senha.'; return; }
+  if(modoCriar){
+    const conf=document.getElementById('inConf').value;
+    if(!login){ err.textContent='Informe o nome de usuário.'; return; }
+    if(senha!==conf){ err.textContent='As senhas não conferem.'; return; }
+    if(senha===SENHA_MASTER){ err.textContent='Escolha outra senha.'; return; }
+    if(!temBackend()){ err.textContent='Sem conexão com o servidor — não é possível criar usuários agora.'; return; }
+    try{
+      await beApi({acao:'criarUsuario', login, senha});
+      sessao={login, master:false, abas:ABAS.map(a=>a.id)};
+      guardarSessao({login, senha});
+      alternarModoCriar(false); aplicarPermissoes(); render();
+    }catch(e){ err.textContent=e.message||'Não foi possível criar o usuário.'; }
+    return;
+  }
+  // master: senha fixa, funciona até sem conexão
+  if(senha===SENHA_MASTER){
+    sessao={login:login||'Master', master:true, abas:ABAS.map(a=>a.id)};
+    guardarSessao({login:sessao.login, senha});
+    aplicarPermissoes(); render();
+    return;
+  }
+  if(!login){ err.textContent='Informe o usuário.'; return; }
+  if(!temBackend()){ err.textContent='Sem conexão com o servidor — use a senha master.'; return; }
+  try{
+    const r=await beApi({acao:'login', login, senha});
+    sessao={login, master:false, abas:(r.abas&&r.abas.length)?r.abas:ABAS.map(a=>a.id)};
+    guardarSessao({login, senha});
+    aplicarPermissoes(); render();
+  }catch(e){ err.textContent=e.message||'Usuário ou senha incorretos.'; }
+}
+function alternarModoCriar(v){
+  modoCriar=v;
+  document.getElementById('lbConf').style.display=v?'':'none';
+  document.getElementById('inConf').style.display=v?'':'none';
+  document.getElementById('btnEntrar').textContent=v?'Criar e entrar':'Entrar';
+  document.getElementById('btnModoCriar').textContent=v?'Já tenho usuário — voltar':'Criar novo usuário';
+  document.getElementById('loginErr').textContent='';
+}
+document.getElementById('btnEntrar').onclick=fazerLogin;
+document.getElementById('btnModoCriar').onclick=()=>alternarModoCriar(!modoCriar);
+document.getElementById('inSenha').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!modoCriar) fazerLogin(); });
+document.getElementById('inConf').addEventListener('keydown',e=>{ if(e.key==='Enter') fazerLogin(); });
+document.getElementById('btnSair').onclick=()=>{
+  sessao=null; guardarSessao(null);
+  document.getElementById('inSenha').value=''; document.getElementById('inConf').value='';
+  aplicarPermissoes();
+};
+async function restaurarSessao(){
+  const s=sessaoSalva(); if(!s) { aplicarPermissoes(); return; }
+  if(s.senha===SENHA_MASTER){ sessao={login:s.login||'Master', master:true, abas:ABAS.map(a=>a.id)}; aplicarPermissoes(); return; }
+  if(temBackend()){
+    try{
+      const r=await beApi({acao:'login', login:s.login, senha:s.senha});
+      sessao={login:s.login, master:false, abas:(r.abas&&r.abas.length)?r.abas:ABAS.map(a=>a.id)};
+    }catch(e){ sessao=null; guardarSessao(null); }
+  }else{ sessao=null; }
+  aplicarPermissoes();
+}
+
+/* ============ ADMIN: usuários (master) ============ */
+async function renderUsuarios(){
+  if(!sessao || !sessao.master) return;
+  const t=document.getElementById('tblUsr'), stU=document.getElementById('usrStatus');
+  t.innerHTML='<tbody><tr><td class="mono-muted" style="text-align:left">Carregando usuários…</td></tr></tbody>';
+  if(!temBackend()){ t.innerHTML='<tbody><tr><td class="mono-muted" style="text-align:left">Sem conexão com o servidor — a gestão de usuários fica na planilha (aba Usuarios).</td></tr></tbody>'; return; }
+  let usuarios=[];
+  try{ const r=await beApi({acao:'listarUsuarios', senhaMaster:SENHA_MASTER}); usuarios=r.usuarios||[]; }
+  catch(e){ t.innerHTML=`<tbody><tr><td class="mono-muted" style="text-align:left">Erro ao listar: ${e.message}</td></tr></tbody>`; return; }
+  let h='<thead><tr><th>Usuário</th><th style="text-align:left">Abas visíveis</th><th></th><th></th></tr></thead><tbody>';
+  if(!usuarios.length) h+='<tr><td class="mono-muted" colspan="4" style="text-align:left">Nenhum usuário criado ainda. Os usuários se cadastram na tela de entrada ("Criar novo usuário").</td></tr>';
+  usuarios.forEach(u=>{
+    const abas=u.abas||[];
+    h+=`<tr data-login="${u.login}"><td class="br-name">${u.login}</td><td style="text-align:left">`+
+      ABAS.map(a=>`<label class="perm-chk"><input type="checkbox" value="${a.id}" ${abas.includes(a.id)?'checked':''}>${a.nome}</label>`).join('')+
+      `</td><td><button class="btn mini primary" data-save="${u.login}">Salvar</button></td>
+      <td><button class="btn mini danger" data-rm="${u.login}">Excluir</button></td></tr>`;
+  });
+  h+='</tbody>';
+  t.innerHTML=h;
+  t.querySelectorAll('button[data-save]').forEach(b=>b.onclick=async()=>{
+    const tr=b.closest('tr');
+    const abas=[...tr.querySelectorAll('input:checked')].map(i=>i.value);
+    stU.innerHTML='';
+    try{
+      await beApi({acao:'salvarUsuario', senhaMaster:SENHA_MASTER, login:b.dataset.save, abas});
+      stU.innerHTML=`<div class="alert ok">Permissões de "${b.dataset.save}" salvas.</div>`;
+    }catch(e){ stU.innerHTML=`<div class="alert err">Erro: ${e.message}</div>`; }
+  });
+  t.querySelectorAll('button[data-rm]').forEach(b=>b.onclick=async()=>{
+    if(!confirm(`Excluir o usuário "${b.dataset.rm}"?`)) return;
+    stU.innerHTML='';
+    try{
+      await beApi({acao:'excluirUsuario', senhaMaster:SENHA_MASTER, login:b.dataset.rm});
+      stU.innerHTML=`<div class="alert ok">Usuário "${b.dataset.rm}" excluído.</div>`;
+      renderUsuarios();
+    }catch(e){ stU.innerHTML=`<div class="alert err">Erro: ${e.message}</div>`; }
+  });
+}
+document.getElementById('btnRecarregarUsr').onclick=()=>renderUsuarios();
+
 /* ================= RENDER ROOT ================= */
 function render(){
   if(!dados) return; // ainda carregando
@@ -786,6 +1259,9 @@ function render(){
   if(curView==='geral') renderGeral();
   else if(curView==='filial') renderFilial();
   else if(curView==='mes') renderMes();
+  else if(curView==='dia') renderDia();
+  else if(curView==='usuarios') renderUsuarios();
+  else if(curView==='importar') renderHist();
 }
 document.getElementById('btnGoImport').onclick=()=>document.querySelector('#nav button[data-view="importar"]').click();
 init();
