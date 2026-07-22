@@ -9,7 +9,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
@@ -293,7 +292,7 @@ tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#FDF3E9}
     <div class="card-hd">
       <div><h2>Filiais no mesmo período</h2>
       <div class="sub" id="subDiaTbl"></div></div>
-      <button class="btn primary" id="btnPdfTodas" style="display:none">Exportar todas em PDF</button>
+      <button class="btn primary" id="btnPdfTodas" style="display:none">Exportar todas em foto</button>
     </div>
     <div class="tbl-scroll"><table id="tblDia"></table></div>
     <div class="imp-status" id="pdfStatus"></div>
@@ -701,112 +700,117 @@ function renderMes(){
   document.getElementById('tblMes').innerHTML=h;
 }
 
-/* ============ EXPORTAÇÃO EM PDF (aviso p/ WhatsApp) ============ */
-// Cartão quadrado 130×130mm com letras grandes: a miniatura que o WhatsApp
-// mostra do PDF já deixa os números legíveis sem abrir o arquivo.
+/* ============ EXPORTAÇÃO EM FOTO (aviso p/ WhatsApp) ============ */
+// Cartão quadrado 1080×1080px em PNG: no WhatsApp a imagem aparece inteira
+// na conversa — dá para ler tudo sem abrir nada.
 function nomeSeguro(s){ return String(s).replace(/[\\/:*?"<>|]/g,'-').trim(); }
-function pdfDaFilial(nomeFilial, a1, a0, y, yc, m, D){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({unit:'mm', format:[130,130]});
-  const W=130, pad=n=>String(n).padStart(2,'0');
+function rrect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  if(ctx.roundRect){ ctx.roundRect(x,y,Math.max(w,2),h,r); }
+  else { ctx.rect(x,y,Math.max(w,2),h); }
+  ctx.fill();
+}
+function fotoDaFilial(nomeFilial, a1, a0, y, yc, m, D){
+  const W=1080,H=1080;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  const pad=n=>String(n).padStart(2,'0');
   const temC = a0!=null;
-  // faixa da marca
-  doc.setFillColor(241,134,52); doc.rect(0,0,W,5,'F');
+  const F="'Inter','Archivo',Arial,sans-serif";
+  // fundo e faixa da marca
+  ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#F18634'; ctx.fillRect(0,0,W,40);
   // logo
   try{
-    const logo=document.querySelector('.brand-chip img').src;
-    doc.addImage(logo,'PNG',(W-46)/2,9,46,13.9); // proporção 662×200
+    const im=document.querySelector('.brand-chip img');
+    const lw=400, lh=lw*(im.naturalHeight/im.naturalWidth || 200/662);
+    ctx.drawImage(im,(W-lw)/2,110,lw,lh);
   }catch(e){}
-  // filial e período
-  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(34,51,58);
-  doc.text(doc.splitTextToSize(nomeFilial, W-16), W/2, 31, {align:'center'});
-  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(107,124,130);
-  doc.text(`Vendas de 01 a ${pad(D)}/${pad(m)} — ${yc} × ${y}`, W/2, 38.5, {align:'center'});
-  doc.setDrawColor(225,230,228); doc.line(12,42,W-12,42);
-  // valores dos dois anos
-  doc.setFontSize(10.5); doc.setTextColor(107,124,130);
-  doc.setFont('helvetica','normal');
-  doc.text(`${yc} (01 a ${pad(D)}/${pad(m)})`, 14, 51);
-  doc.text(`${y} (01 a ${pad(D)}/${pad(m)})`, 14, 63);
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(34,51,58);
-  doc.text(temC?fmtBRL2(a0):'sem dados', W-14, 51, {align:'right'});
-  doc.text(fmtBRL2(a1), W-14, 63, {align:'right'});
-  // barras comparativas
-  const maxV=Math.max(a1||0, a0||0)||1, bw=W-28;
-  doc.setFillColor(200,208,214); doc.roundedRect(14,54,(temC?bw*(a0/maxV):0)||0.1,3.4,1.2,1.2,'F');
-  doc.setFillColor(241,134,52);  doc.roundedRect(14,66,bw*((a1||0)/maxV)||0.1,3.4,1.2,1.2,'F');
-  doc.setDrawColor(225,230,228); doc.line(12,76,W-12,76);
-  // variação e diferença — o destaque do cartão
+  // filial (reduz a fonte se o nome for comprido)
+  ctx.textAlign='center'; ctx.fillStyle='#22333A';
+  let fs=56; ctx.font=`800 ${fs}px ${F}`;
+  while(ctx.measureText(nomeFilial).width>W-140 && fs>32){ fs-=2; ctx.font=`800 ${fs}px ${F}`; }
+  ctx.fillText(nomeFilial, W/2, 340);
+  ctx.fillStyle='#6B7C82'; ctx.font=`500 34px ${F}`;
+  ctx.fillText(`Vendas de 01 a ${pad(D)}/${pad(m)} — ${yc} × ${y}`, W/2, 398);
+  ctx.strokeStyle='#E1E6E4'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(140,450); ctx.lineTo(W-140,450); ctx.stroke();
+  // variação e diferença — só isso, em destaque
   if(temC && a0>0){
     const p=(a1-a0)/a0*100, dif=a1-a0, pos=dif>=0;
-    if(pos) doc.setTextColor(14,122,85); else doc.setTextColor(180,50,46);
-    doc.setFont('helvetica','bold'); doc.setFontSize(30);
+    const cor=pos?'#0E7A55':'#B4322E';
+    ctx.fillStyle=cor; ctx.textAlign='center';
+    ctx.font=`800 168px ${F}`;
     const ptxt=`${pos?'+':'-'}${Math.abs(p).toLocaleString('pt-BR',{maximumFractionDigits:1})}%`;
-    doc.text(ptxt, W/2+4, 93, {align:'center'});
-    // seta (triângulo)
-    if(pos) doc.setFillColor(14,122,85); else doc.setFillColor(180,50,46);
-    const tx=W/2+4-doc.getTextWidth(ptxt)/2-8;
-    if(pos) doc.triangle(tx-3,93,tx+3,93,tx,87.5,'F');
-    else    doc.triangle(tx-3,87.5,tx+3,87.5,tx,93,'F');
-    doc.setFontSize(16.5);
-    doc.text(`${pos?'+ ':'- '}${fmtBRL2(Math.abs(dif))}`, W/2, 104, {align:'center'});
-    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(107,124,130);
-    doc.text(pos?`na frente de ${yc} no mesmo período`:`atrás de ${yc} no mesmo período`, W/2, 111, {align:'center'});
+    const pw=ctx.measureText(ptxt).width;
+    ctx.fillText(ptxt, W/2+44, 646);
+    // seta triangular
+    const tx=W/2+44-pw/2-62, ty=596;
+    ctx.beginPath();
+    if(pos){ ctx.moveTo(tx-34,ty+32); ctx.lineTo(tx+34,ty+32); ctx.lineTo(tx,ty-28); }
+    else   { ctx.moveTo(tx-34,ty-28); ctx.lineTo(tx+34,ty-28); ctx.lineTo(tx,ty+32); }
+    ctx.closePath(); ctx.fill();
+    ctx.font=`800 84px ${F}`;
+    ctx.fillText(`${pos?'+ ':'- '}${fmtBRL2(Math.abs(dif))}`, W/2, 790);
+    ctx.fillStyle='#6B7C82'; ctx.font=`500 38px ${F}`;
+    ctx.fillText(pos?`na frente de ${yc} no mesmo período`:`atrás de ${yc} no mesmo período`, W/2, 872);
   }else{
-    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(107,124,130);
-    doc.text(`Sem base de comparação de ${yc}`, W/2, 95, {align:'center'});
+    ctx.fillStyle='#6B7C82'; ctx.textAlign='center'; ctx.font=`700 48px ${F}`;
+    ctx.fillText(`Sem base de comparação de ${yc}`, W/2, 660);
   }
   // rodapé
-  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,160,163);
-  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} · Miashop`, W/2, 123, {align:'center'});
-  return doc;
+  ctx.fillStyle='#96A0A3'; ctx.textAlign='center'; ctx.font=`400 27px ${F}`;
+  ctx.fillText(`Gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})} · Miashop`, W/2, 1026);
+  return cv;
+}
+function canvasParaBlob(cv){ return new Promise(res=>cv.toBlob(res,'image/png')); }
+async function baixarCanvas(cv,nome){
+  const b=await canvasParaBlob(cv);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b); a.download=nome; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
 function listaFiliaisDia(y,m,yc,D,temComp){
   const brs=new Set();
   for(const b in diario){ if(acumFilial(b,y,m,D)!=null || (temComp && acumFilial(b,yc,m,D)!=null)) brs.add(b); }
   return [...brs].sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)||a.localeCompare(b));
 }
-function exportarPdfFilial(b){
+async function exportarFotoFilial(b){
   const stP=document.getElementById('pdfStatus'); stP.innerHTML='';
   try{
-    if(!window.jspdf) throw new Error('biblioteca de PDF não carregou (recarregue a página)');
     const y=selDiaAno, m=selDiaMes, yc=selDiaComp, D=ultimoDiaLancado(y,m);
     if(!D) throw new Error('sem vendas no mês selecionado');
     const temC = yc!=null && yc!==y;
     const a1=acumFilial(b,y,m,D), a0=temC?acumFilial(b,yc,m,D):null;
-    const doc=pdfDaFilial(b, a1||0, a0, y, yc, m, D);
-    doc.save(`${nomeSeguro(b)} - ${MESES[m-1]} ${y}.pdf`);
-  }catch(e){ stP.innerHTML=`<div class="alert err">Erro ao gerar PDF: ${e.message}</div>`; }
+    await baixarCanvas(fotoDaFilial(b, a1||0, a0, y, yc, m, D), `${nomeSeguro(b)} - ${MESES[m-1]} ${y}.png`);
+  }catch(e){ stP.innerHTML=`<div class="alert err">Erro ao gerar a foto: ${e.message}</div>`; }
 }
-async function exportarPdfTodas(){
+async function exportarFotoTodas(){
   const stP=document.getElementById('pdfStatus'); stP.innerHTML='';
   try{
-    if(!window.jspdf) throw new Error('biblioteca de PDF não carregou (recarregue a página)');
     if(!window.JSZip) throw new Error('biblioteca ZIP não carregou (recarregue a página)');
     const y=selDiaAno, m=selDiaMes, yc=selDiaComp, D=ultimoDiaLancado(y,m);
     if(!D) throw new Error('sem vendas no mês selecionado');
     const temC = yc!=null && yc!==y;
     const lista=listaFiliaisDia(y,m,yc,D,temC);
     if(!lista.length) throw new Error('nenhuma filial com vendas no período');
-    stP.innerHTML='<div class="alert" style="background:var(--chip);color:var(--muted)">Gerando PDFs…</div>';
+    stP.innerHTML='<div class="alert" style="background:var(--chip);color:var(--muted)">Gerando as fotos…</div>';
     const zip=new JSZip();
-    lista.forEach(b=>{
+    for(const b of lista){
       const a1=acumFilial(b,y,m,D), a0=temC?acumFilial(b,yc,m,D):null;
-      const doc=pdfDaFilial(b, a1||0, a0, y, yc, m, D);
-      zip.file(`${nomeSeguro(b)} - ${MESES[m-1]} ${y}.pdf`, doc.output('blob'));
-    });
-    // total geral
+      zip.file(`${nomeSeguro(b)} - ${MESES[m-1]} ${y}.png`, await canvasParaBlob(fotoDaFilial(b, a1||0, a0, y, yc, m, D)));
+    }
     const at=acumTotal(y,m,D)||0, an=temC?acumTotal(yc,m,D):null;
-    zip.file(`00 - TOTAL GERAL - ${MESES[m-1]} ${y}.pdf`, pdfDaFilial('TOTAL — TODAS AS FILIAIS', at, an, y, yc, m, D).output('blob'));
+    zip.file(`00 - TOTAL GERAL - ${MESES[m-1]} ${y}.png`, await canvasParaBlob(fotoDaFilial('TOTAL — TODAS AS FILIAIS', at, an, y, yc, m, D)));
     const blob=await zip.generateAsync({type:'blob'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download=`Comparativo ${MESES[m-1]} ${y} - PDFs por filial.zip`;
+    a.download=`Comparativo ${MESES[m-1]} ${y} - fotos por filial.zip`;
     a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    stP.innerHTML=`<div class="alert ok">${lista.length+1} PDFs gerados (um por filial + total geral), baixados juntos em um arquivo ZIP. Extraia e envie cada um pelo WhatsApp.</div>`;
-  }catch(e){ stP.innerHTML=`<div class="alert err">Erro ao gerar PDFs: ${e.message}</div>`; }
+    stP.innerHTML=`<div class="alert ok">${lista.length+1} fotos geradas (uma por filial + total geral), baixadas juntas em um ZIP. Extraia e envie cada uma pelo WhatsApp — a imagem aparece inteira na conversa.</div>`;
+  }catch(e){ stP.innerHTML=`<div class="alert err">Erro ao gerar as fotos: ${e.message}</div>`; }
 }
-document.getElementById('btnPdfTodas').onclick=exportarPdfTodas;
+document.getElementById('btnPdfTodas').onclick=exportarFotoTodas;
 
 /* ================= RENDER: COMPARATIVO POR DIA ================= */
 function renderDia(){
@@ -878,23 +882,21 @@ function renderDia(){
       `<td><span class="cellv num">${fmtBRL2(a1)}</span></td>`+
       (temComp?`<td>${pillHTML(pct(a1,a0))}</td>
       <td class="num" style="font-weight:700;color:${d2==null?'var(--muted)':(d2>=0?'var(--pos)':'var(--neg)')}">${difTxt(d2)}</td>`:'')+
-      `<td><button class="btn mini primary" data-pdf="${b.replace(/"/g,'&quot;')}">PDF</button></td></tr>`;
+      `<td><button class="btn mini primary" data-pdf="${b.replace(/"/g,'&quot;')}">Foto</button></td></tr>`;
   });
   h+=`<tr class="total"><td>TOTAL</td>`+
     (temComp?`<td class="num">${fmtBRL2(ant)}</td>`:'')+
     `<td class="num">${fmtBRL2(atual)}</td>`+
     (temComp?`<td>${pillHTML(p)}</td><td class="num" style="color:${dif==null?'inherit':(dif>=0?'var(--pos)':'var(--neg)')}">${difTxt(dif)}</td>`:'')+
-    `<td><button class="btn mini primary" data-pdf="__TOTAL__">PDF</button></td></tr></tbody>`;
+    `<td><button class="btn mini primary" data-pdf="__TOTAL__">Foto</button></td></tr></tbody>`;
   document.getElementById('tblDia').innerHTML=h;
-  document.querySelectorAll('#tblDia button[data-pdf]').forEach(bt=>bt.onclick=()=>{
+  document.querySelectorAll('#tblDia button[data-pdf]').forEach(bt=>bt.onclick=async()=>{
     const alvo=bt.dataset.pdf;
     if(alvo==='__TOTAL__'){
       const at=acumTotal(y,m,D)||0, an=temComp?acumTotal(yc,m,D):null;
-      try{
-        if(!window.jspdf) throw new Error('biblioteca de PDF não carregou');
-        pdfDaFilial('TOTAL — TODAS AS FILIAIS', at, an, y, yc, m, D).save(`TOTAL GERAL - ${MESES[m-1]} ${y}.pdf`);
-      }catch(e){ document.getElementById('pdfStatus').innerHTML=`<div class="alert err">Erro: ${e.message}</div>`; }
-    } else exportarPdfFilial(alvo);
+      try{ await baixarCanvas(fotoDaFilial('TOTAL — TODAS AS FILIAIS', at, an, y, yc, m, D), `TOTAL GERAL - ${MESES[m-1]} ${y}.png`); }
+      catch(e){ document.getElementById('pdfStatus').innerHTML=`<div class="alert err">Erro: ${e.message}</div>`; }
+    } else exportarFotoFilial(alvo);
   });
   document.getElementById('btnPdfTodas').style.display='';
 }
